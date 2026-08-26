@@ -1,13 +1,12 @@
-import type { ReactNode } from 'react';
 
 interface Props {
-  activeTab: 'history' | 'plan' | 'charts' | 'settings';
-  setActiveTab: (tab: 'history' | 'plan' | 'charts' | 'settings') => void;
+  activeTab: 'history' | 'plan' | 'charts' | 'draft' | 'settings';
+  setActiveTab: (tab: 'history' | 'plan' | 'charts' | 'draft' | 'settings') => void;
   location: 'home' | 'gym';
   setLocation: (loc: 'home' | 'gym') => void;
 }
 
-export default function AppHeader({ activeTab, setActiveTab, location, setLocation }: Props) {
+export default function AppHeader({ activeTab, setActiveTab }: Props) {
   return (
     <div className="app-header">
       <div className="app-header-title-row">
@@ -15,20 +14,6 @@ export default function AppHeader({ activeTab, setActiveTab, location, setLocati
           <span className="zebra-badge">🏋️</span>
           Hevy Chat
         </h1>
-        <div className="location-toggle">
-          <button
-            className={location === 'home' ? 'active' : ''}
-            onClick={() => setLocation('home')}
-          >
-            Home
-          </button>
-          <button
-            className={location === 'gym' ? 'active' : ''}
-            onClick={() => setLocation('gym')}
-          >
-            Gym
-          </button>
-        </div>
       </div>
 
       <div className="tab-bar">
@@ -49,6 +34,12 @@ export default function AppHeader({ activeTab, setActiveTab, location, setLocati
           onClick={() => setActiveTab('charts')}
         >
           Charts
+        </button>
+        <button
+          className={activeTab === 'draft' ? 'active' : ''}
+          onClick={() => setActiveTab('draft')}
+        >
+          Draft
         </button>
         <button
           className={activeTab === 'settings' ? 'active' : ''}

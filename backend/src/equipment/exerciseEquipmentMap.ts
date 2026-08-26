@@ -19,6 +19,21 @@ function getRequiredEquipment(exercise: ExerciseTemplate): string[] {
     return EXERCISE_EQUIPMENT_OVERRIDES[exercise.title];
   }
 
+  // Use Hevy's real equipment field for reliable buckets, fall back to heuristic for "machine"
+  if (exercise.equipment) {
+    const equipLower = exercise.equipment.toLowerCase();
+
+    // Reliable Hevy buckets (use directly)
+    if (equipLower === 'dumbbell') return ['dumbbell'];
+    if (equipLower === 'barbell') return ['barbell'];
+    if (equipLower === 'kettlebell') return ['kettlebell'];
+    if (equipLower === 'resistance_band' || equipLower === 'band') return ['band'];
+    if (equipLower === 'none') return ['bodyweight'];
+
+    // For "machine" and other coarse buckets, fall through to heuristic
+    // since the title patterns distinguish specific machine types better
+  }
+
   // Heuristic: infer from title
   const titleLower = exercise.title.toLowerCase();
 

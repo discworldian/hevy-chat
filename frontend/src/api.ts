@@ -124,3 +124,24 @@ export async function updateTrainingSettings(weeklyFrequencyTarget: number) {
 export async function restartPlan(templateId: string) {
   return fetchApi(`/exercises/${templateId}/plan/restart`, { method: 'POST' });
 }
+
+export async function generateDraftWorkout(minutesAvailable: number, location: 'home' | 'gym', includeCardio: boolean = false) {
+  return fetchApi('/draft-workout/generate', {
+    method: 'POST',
+    body: JSON.stringify({ minutesAvailable, location, includeCardio }),
+  });
+}
+
+export async function previewDraftPush(title: string, exercises: any[], includeWarmup: boolean = true) {
+  return fetchApi('/draft-workout/push/preview', {
+    method: 'POST',
+    body: JSON.stringify({ title, exercises, includeWarmup }),
+  });
+}
+
+export async function confirmDraftPush(title: string, exercises: any[], previewToken: string, includeWarmup: boolean = true) {
+  return fetchApi('/draft-workout/push/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ title, exercises, previewToken, includeWarmup }),
+  });
+}

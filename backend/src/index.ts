@@ -8,6 +8,7 @@ import planRouter from './routes/plan.js';
 import analyticsRouter from './routes/analytics.js';
 import equipmentRouter from './routes/equipment.js';
 import pushRouter from './routes/push.js';
+import draftWorkoutRouter from './routes/draftWorkout.js';
 import settingsRouter from './routes/settings.js';
 import type { HevyApiError } from './hevyClient.js';
 
@@ -23,6 +24,7 @@ app.use('/api/plan', planRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/equipment', equipmentRouter);
 app.use('/api/push', pushRouter);
+app.use('/api/draft-workout', draftWorkoutRouter);
 app.use('/api/settings', settingsRouter);
 
 // Global error handler

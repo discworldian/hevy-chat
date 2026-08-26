@@ -38,7 +38,7 @@ export default function ChartsView() {
 
   const totalVolume = workouts.reduce((sum, w) => {
     return sum + w.exercises.reduce((exSum, ex) => {
-      return exSum + ex.sets.reduce((setSum, set) => {
+      return exSum + ex.sets.reduce((setSum: any, set: any) => {
         if (set.type !== 'warmup' && set.weight_kg && set.reps) {
           return setSum + set.weight_kg * set.reps;
         }
@@ -64,7 +64,7 @@ export default function ChartsView() {
       }
       exerciseVolume[exercise.exercise_template_id].sessions++;
 
-      for (const set of exercise.sets) {
+      for (const set of exercise.sets as any[]) {
         if (set.type !== 'warmup' && set.weight_kg && set.reps) {
           exerciseVolume[exercise.exercise_template_id].volume += set.weight_kg * set.reps;
         }

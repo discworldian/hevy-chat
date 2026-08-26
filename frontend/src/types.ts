@@ -78,3 +78,25 @@ export interface WorkoutAdvice {
     suggestion?: Suggestion;
   }>;
 }
+
+export interface DraftWorkoutExercise {
+  exerciseTemplateId: string;
+  title: string;
+  primaryMuscleGroup: string | null;
+  isNew: boolean;
+  daysSinceTrained: number | null;
+  sets: number;
+  targetRepsLow: number;
+  targetRepsHigh: number;
+  targetReps: number;
+  suggestedWeightKg: number | null;
+  suggestion?: Suggestion;
+}
+
+export interface DraftWorkout {
+  location: 'home' | 'gym';
+  minutesAvailable: number;
+  estimatedMinutes: number;
+  summary: string;
+  exercises: DraftWorkoutExercise[];
+}

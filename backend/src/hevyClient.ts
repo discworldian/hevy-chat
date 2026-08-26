@@ -83,15 +83,19 @@ async function request<T>(
 
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}`;
+      let errorDetails = '';
       try {
-        const body = (await response.json()) as { message?: string };
-        errorMessage = body.message || errorMessage;
+        const body = (await response.json()) as { message?: string; error?: string; errors?: Record<string, unknown> };
+        errorMessage = body.message || body.error || errorMessage;
+        if (body.errors) {
+          errorDetails = ` (${JSON.stringify(body.errors)})`;
+        }
       } catch {
         // ignore parse error
       }
 
       const retryable = response.status === 429 || response.status >= 500;
-      throw new HevyApiError(response.status, errorMessage, retryable);
+      throw new HevyApiError(response.status, errorMessage + errorDetails, retryable);
     }
 
     const data = (await response.json()) as T;
@@ -130,6 +134,13 @@ export async function getWorkoutEvents(since?: string): Promise<any> {
 
 export async function getWorkout(id: string): Promise<Workout> {
   return await request(`/workouts/${id}`);
+}
+
+export async function updateWorkout(id: string, body: any): Promise<Workout> {
+  return await request(`/workouts/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
 }
 
 export async function listRoutines(page: number = 1, pageSize: number = 10): Promise<Routine[]> {
