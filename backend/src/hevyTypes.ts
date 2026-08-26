@@ -13,7 +13,7 @@ export interface WorkoutExercise {
   index: number;
   title: string;
   exercise_template_id: string;
-  supersets_id: number | null;
+  superset_id: number | null;
   notes: string | null;
   sets: WorkoutSet[];
 }
@@ -35,6 +35,8 @@ export interface ExerciseTemplate {
   title: string;
   category: string | null;
   primary_muscle_group: string | null;
+  secondary_muscle_groups: string[] | null;
+  equipment: string | null;
 }
 
 export interface RoutineSet {
@@ -48,7 +50,7 @@ export interface RoutineExercise {
   index: number;
   title: string;
   exercise_template_id: string;
-  supersets_id: number | null;
+  superset_id: number | null;
   notes: string | null;
   sets: RoutineSet[];
 }

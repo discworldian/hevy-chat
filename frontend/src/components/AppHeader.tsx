@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
 interface Props {
-  activeTab: 'history' | 'plan' | 'charts';
-  setActiveTab: (tab: 'history' | 'plan' | 'charts') => void;
+  activeTab: 'history' | 'plan' | 'charts' | 'settings';
+  setActiveTab: (tab: 'history' | 'plan' | 'charts' | 'settings') => void;
   location: 'home' | 'gym';
   setLocation: (loc: 'home' | 'gym') => void;
 }
@@ -49,6 +49,12 @@ export default function AppHeader({ activeTab, setActiveTab, location, setLocati
           onClick={() => setActiveTab('charts')}
         >
           Charts
+        </button>
+        <button
+          className={activeTab === 'settings' ? 'active' : ''}
+          onClick={() => setActiveTab('settings')}
+        >
+          Settings
         </button>
       </div>
     </div>

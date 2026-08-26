@@ -1,6 +1,6 @@
 import type { ExerciseTemplate } from '../hevyTypes.js';
 
-const COMPOUND_LIFT_PATTERN = /squat|deadlift|press|row|clean|snatch|jerk/i;
+export const COMPOUND_LIFT_PATTERN = /squat|deadlift|press|row|clean|snatch|jerk/i;
 
 interface ExerciseIncrement {
   smallIncrement: number; // kg
@@ -54,6 +54,10 @@ export function getIncrementForExercise(
   }
 
   return EXERCISE_CATEGORY_INCREMENTS.isolation.smallIncrement;
+}
+
+export function isCompoundExercise(exercise: ExerciseTemplate): boolean {
+  return COMPOUND_LIFT_PATTERN.test(exercise.title);
 }
 
 export function roundToNearestIncrement(weight: number, increment: number): number {

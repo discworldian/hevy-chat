@@ -5,9 +5,10 @@ import AppHeader from './components/AppHeader.jsx';
 import HistoryView from './components/HistoryView.jsx';
 import PlanView from './components/PlanView.jsx';
 import ChartsView from './components/ChartsView.jsx';
+import SettingsView from './components/SettingsView.jsx';
 import ErrorBanner from './components/ErrorBanner.jsx';
 
-type Tab = 'history' | 'plan' | 'charts';
+type Tab = 'history' | 'plan' | 'charts' | 'settings';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('history');
@@ -65,6 +66,7 @@ export default function App() {
         {activeTab === 'history' && <HistoryView location={location} />}
         {activeTab === 'plan' && <PlanView location={location} />}
         {activeTab === 'charts' && <ChartsView />}
+        {activeTab === 'settings' && <SettingsView />}
       </div>
 
       <footer className="app-footer">

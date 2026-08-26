@@ -42,6 +42,13 @@ export interface Workout {
   exercises: any[];
 }
 
+export interface ExerciseTemplate {
+  templateId: string;
+  name: string;
+  category: string | null;
+  primaryMuscleGroup: string | null;
+}
+
 export interface HealthStatus {
   ok: boolean;
   hevyKeyPresent: boolean;

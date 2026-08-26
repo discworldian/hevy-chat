@@ -15,6 +15,7 @@ router.get('/', async (req: Request, res: Response) => {
       templateId: t.id,
       name: t.title,
       category: t.category,
+      primaryMuscleGroup: t.primary_muscle_group,
     }));
     res.json({ exercises });
   } catch (err) {

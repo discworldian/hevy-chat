@@ -101,6 +101,31 @@ function getAnimalComparison(weight: number) {
   return closest;
 }
 
+function formatMuscleLabel(raw: string) {
+  return raw.split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+}
+
+function getGroupColor(groupId: number | null, groupIdx: number) {
+  if (groupId === null) return 'transparent';
+  // Use groupId and index to generate a consistent but varied color
+  const seed = (groupId + groupIdx * 7) % 12;
+  const colors = [
+    '#FF6B6B', // red
+    '#4ECDC4', // teal
+    '#45B7D1', // blue
+    '#FFA07A', // salmon
+    '#98D8C8', // mint
+    '#F7DC6F', // yellow
+    '#BB8FCE', // purple
+    '#85C1E2', // sky blue
+    '#F8B88B', // peach
+    '#A8D8EA', // light blue
+    '#D5F4E6', // light green
+    '#FADBD8', // light pink
+  ];
+  return colors[seed];
+}
+
 async function fetchAnimalData(animalWikiName: string): Promise<{ image: string | null; summary: string | null }> {
   try {
     const response = await fetch(
@@ -138,6 +163,9 @@ export default function HistoryView({ location }: Props) {
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [workoutAdvice, setWorkoutAdvice] = useState<Record<string, WorkoutAdvice>>({});
   const [loadingAdvice, setLoadingAdvice] = useState<Record<string, boolean>>({});
+  const [muscleGroupMap, setMuscleGroupMap] = useState<Record<string, string | null>>({});
+  const [selectedMuscleGroups, setSelectedMuscleGroups] = useState<string[]>([]);
+  const [sessionMuscleFilter, setSessionMuscleFilter] = useState<string[]>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -160,6 +188,22 @@ export default function HistoryView({ location }: Props) {
     load();
   }, [location]);
 
+  useEffect(() => {
+    const loadTemplates = async () => {
+      try {
+        const data = (await api.getExercises()) as { exercises: any[] };
+        const map: Record<string, string | null> = {};
+        (data.exercises || []).forEach((t: any) => {
+          map[t.templateId] = t.primaryMuscleGroup;
+        });
+        setMuscleGroupMap(map);
+      } catch (err) {
+        // silently fail — muscle group filtering is optional
+      }
+    };
+    loadTemplates();
+  }, []);
+
   if (error) return <ErrorBanner message={error} />;
 
   const isExpanded = (id: string) => expandedId === id;
@@ -178,6 +222,14 @@ export default function HistoryView({ location }: Props) {
     }
   };
 
+  // Derive all available muscle groups
+  const allMuscleGroups = Array.from(
+    new Set(
+      Object.values(muscleGroupMap)
+        .filter((m): m is string => m !== null)
+    )
+  ).sort();
+
   // Filter and sort workouts
   const filteredWorkouts = workouts.filter((w) => {
     // Search filter (title and date)
@@ -189,10 +241,23 @@ export default function HistoryView({ location }: Props) {
     // Date filter
     if (dateFilter) {
       const workoutDate = new Date(w.start_time).toISOString().split('T')[0];
-      return matchesSearch && workoutDate === dateFilter;
+      if (!matchesSearch || workoutDate !== dateFilter) {
+        return false;
+      }
+    } else if (!matchesSearch) {
+      return false;
     }
 
-    return matchesSearch;
+    // Muscle group filter
+    if (selectedMuscleGroups.length > 0) {
+      const hasSelectedMuscle = w.exercises.some((ex: any) => {
+        const muscleGroup = muscleGroupMap[ex.exercise_template_id];
+        return selectedMuscleGroups.includes(muscleGroup as string);
+      });
+      return hasSelectedMuscle;
+    }
+
+    return true;
   });
 
   // Sort
@@ -273,6 +338,35 @@ export default function HistoryView({ location }: Props) {
                 </select>
               </div>
             </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                Muscle Group
+              </label>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {allMuscleGroups.map((muscle) => (
+                  <button
+                    key={muscle}
+                    onClick={() => {
+                      setSelectedMuscleGroups((prev) =>
+                        prev.includes(muscle) ? prev.filter((m) => m !== muscle) : [...prev, muscle]
+                      );
+                    }}
+                    style={{
+                      padding: '4px 10px',
+                      background: selectedMuscleGroups.includes(muscle) ? 'var(--accent)' : 'var(--bg)',
+                      color: selectedMuscleGroups.includes(muscle) ? 'var(--accent-contrast)' : 'var(--text)',
+                      border: `1px solid ${selectedMuscleGroups.includes(muscle) ? 'var(--accent)' : 'var(--border)'}`,
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    {formatMuscleLabel(muscle)}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
@@ -295,7 +389,10 @@ export default function HistoryView({ location }: Props) {
             >
               {/* Accordion Header */}
               <button
-                onClick={() => setExpandedId(isExpanded(w.id) ? null : w.id)}
+                onClick={() => {
+                  setExpandedId(isExpanded(w.id) ? null : w.id);
+                  setSessionMuscleFilter([]);
+                }}
                 style={{
                   width: '100%',
                   padding: '12px 16px',
@@ -364,14 +461,14 @@ export default function HistoryView({ location }: Props) {
 
                     w.exercises.forEach((ex) => {
                       // If this exercise belongs to the same superset as the current group, add it
-                      if (currentGroup && currentGroup.supersetId === ex.supersets_id && ex.supersets_id !== null) {
+                      if (currentGroup && currentGroup.supersetId === ex.superset_id && ex.superset_id !== null) {
                         currentGroup.exercises.push(ex);
                       } else {
                         // Start a new group
                         if (currentGroup) {
                           groupedExercises.push(currentGroup);
                         }
-                        currentGroup = { supersetId: ex.supersets_id, exercises: [ex] };
+                        currentGroup = { supersetId: ex.superset_id, exercises: [ex] };
                       }
                     });
 
@@ -380,25 +477,99 @@ export default function HistoryView({ location }: Props) {
                       groupedExercises.push(currentGroup);
                     }
 
+                    // Compute session-scoped muscle groups
+                    const sessionMuscleGroups = Array.from(
+                      new Set(
+                        w.exercises
+                          .map((ex: any) => muscleGroupMap[ex.exercise_template_id])
+                          .filter((m): m is string => m !== null && m !== undefined)
+                      )
+                    ).sort();
+
+                    // Filter groups based on session muscle filter
+                    const visibleGroups = groupedExercises
+                      .map((group) => ({
+                        ...group,
+                        exercises: group.exercises.filter((ex: any) => {
+                          if (sessionMuscleFilter.length === 0) return true;
+                          const muscleGroup = muscleGroupMap[ex.exercise_template_id];
+                          return sessionMuscleFilter.includes(muscleGroup as string);
+                        }),
+                      }))
+                      .filter((group) => group.exercises.length > 0);
+
                     return (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {groupedExercises.map((group, groupIdx) => {
-                          const isSupersetGroup = group.supersetId !== null && group.exercises.length > 1;
+                        {/* Session-scoped muscle filter */}
+                        {sessionMuscleGroups.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <label style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                              Filter by Muscle
+                            </label>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              {sessionMuscleGroups.map((muscle) => (
+                                <button
+                                  key={muscle}
+                                  onClick={() => {
+                                    setSessionMuscleFilter((prev) =>
+                                      prev.includes(muscle) ? prev.filter((m) => m !== muscle) : [...prev, muscle]
+                                    );
+                                  }}
+                                  style={{
+                                    padding: '4px 10px',
+                                    background: sessionMuscleFilter.includes(muscle) ? 'var(--accent)' : 'var(--bg)',
+                                    color: sessionMuscleFilter.includes(muscle) ? 'var(--accent-contrast)' : 'var(--text)',
+                                    border: `1px solid ${sessionMuscleFilter.includes(muscle) ? 'var(--accent)' : 'var(--border)'}`,
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
+                                  }}
+                                >
+                                  {formatMuscleLabel(muscle)}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {visibleGroups.length === 0 && sessionMuscleFilter.length > 0 && (
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '12px' }}>
+                            No exercises match the selected muscle group.
+                          </div>
+                        )}
+
+                        {visibleGroups.map((group, groupIdx) => {
+                          const isGrouped = group.supersetId !== null && group.exercises.length > 1;
+                          const isCircuit = isGrouped && group.exercises.length >= 3;
+                          const isSuperset = isGrouped && group.exercises.length === 2;
+                          const labelText = isCircuit ? 'Circuit' : isSuperset ? 'Superset' : '';
+
+                          const borderColor = getGroupColor(group.supersetId, groupIdx);
 
                           return (
                             <div
                               key={`group-${group.supersetId}-${groupIdx}`}
                               style={{
-                                borderLeft: isSupersetGroup ? '3px solid var(--accent)' : 'none',
-                                paddingLeft: isSupersetGroup ? '12px' : '0px',
+                                borderLeft: isGrouped ? `4px solid ${borderColor}` : 'none',
+                                paddingLeft: isGrouped ? '12px' : '0px',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 gap: '8px',
                               }}
                             >
-                              {isSupersetGroup && (
-                                <div style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 600, textTransform: 'uppercase' }}>
-                                  Superset
+                              {isGrouped && (
+                                <div
+                                  style={{
+                                    fontSize: '11px',
+                                    color: borderColor,
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px',
+                                    padding: '4px 0',
+                                  }}
+                                >
+                                  ◆ {labelText}
                                 </div>
                               )}
                               {group.exercises.map((ex: any) => {
@@ -425,6 +596,11 @@ export default function HistoryView({ location }: Props) {
                                   >
                                     <div style={{ flex: 1 }}>
                                       <div style={{ fontWeight: 500, fontSize: '14px' }}>{ex.title}</div>
+                                      {muscleGroupMap[ex.exercise_template_id] && (
+                                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px', textTransform: 'uppercase', fontWeight: 500 }}>
+                                          {formatMuscleLabel(muscleGroupMap[ex.exercise_template_id] as string)}
+                                        </div>
+                                      )}
                                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
                                         {nonWarmupSets.length} sets •{' '}
                                         {nonWarmupSets
