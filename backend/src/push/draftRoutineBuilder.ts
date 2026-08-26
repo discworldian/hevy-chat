@@ -27,8 +27,26 @@ export function buildCreateRoutinePayload(
   exercises: DraftWorkoutExercise[],
   folderIdOrNull?: string | null,
   includeWarmup: boolean = true,
+  includeWarmupCooldown: boolean = false,
 ): CreateRoutinePayload {
-  const routineExercises: CreateRoutineExercise[] = exercises.map((draftEx) => {
+  const routineExercises: CreateRoutineExercise[] = [];
+
+  // Add warm-up exercise if requested
+  if (includeWarmupCooldown) {
+    routineExercises.push({
+      exercise_template_id: 'warmup-placeholder',
+      sets: [
+        {
+          type: 'normal',
+          reps: 10,
+          weight_kg: undefined,
+        },
+      ],
+    });
+  }
+
+  // Add main exercises
+  routineExercises.push(...exercises.map((draftEx) => {
     const sets: CreateRoutineExerciseSet[] = [];
 
     // Add warm-up set if requested
@@ -55,7 +73,21 @@ export function buildCreateRoutinePayload(
       exercise_template_id: draftEx.exerciseTemplateId,
       sets,
     };
-  });
+  }));
+
+  // Add cool-down exercise if requested
+  if (includeWarmupCooldown) {
+    routineExercises.push({
+      exercise_template_id: 'cooldown-placeholder',
+      sets: [
+        {
+          type: 'normal',
+          reps: 1,
+          weight_kg: undefined,
+        },
+      ],
+    });
+  }
 
   const payload: CreateRoutinePayload = {
     routine: {

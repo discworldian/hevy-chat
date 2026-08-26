@@ -42,6 +42,7 @@ export async function buildDraftWorkout(
   minutesAvailable: number,
   location: Location,
   includeCardio: boolean = false,
+  includeWarmupCooldown: boolean = false,
 ): Promise<DraftWorkout | DraftWorkoutError> {
   const workoutsCache = await cache.readWorkouts();
   const templatesCache = await cache.readTemplates();
@@ -69,6 +70,7 @@ export async function buildDraftWorkout(
   // Track which muscles are addressed by the draft
   const addressedMuscles = new Set<string>();
   const selectedExercises: DraftWorkoutExercise[] = [];
+  const usedTemplateIds = new Set<string>();
   let usedSeconds = 0;
 
   // Helper to find exercise candidates for a muscle group (Note: requires location to be available at call site)
@@ -165,15 +167,17 @@ export async function buildDraftWorkout(
     }
 
     const candidates = await findCandidates(muscleGroup);
-    if (candidates.length === 0) {
+    // Filter out exercises already used in this draft
+    const availableCandidates = candidates.filter((t) => !usedTemplateIds.has(t.id));
+    if (availableCandidates.length === 0) {
       continue; // No available exercise for this muscle at this location
     }
 
     // Prefer a previously-logged exercise
-    let selectedTemplate = candidates.find((t) => hasExerciseHistory(t.id));
+    let selectedTemplate = availableCandidates.find((t) => hasExerciseHistory(t.id));
     if (!selectedTemplate) {
       // Fall back to untried: prefer barbell/dumbbell compound over machines
-      selectedTemplate = candidates.sort((a, b) => {
+      selectedTemplate = availableCandidates.sort((a, b) => {
         const aEquip = (a.equipment || 'other').toLowerCase();
         const bEquip = (b.equipment || 'other').toLowerCase();
 
@@ -183,7 +187,7 @@ export async function buildDraftWorkout(
         if (aPreferred !== bPreferred) return aPreferred - bPreferred;
 
         // Fall back to array order (stable)
-        return candidates.indexOf(a) - candidates.indexOf(b);
+        return availableCandidates.indexOf(a) - availableCandidates.indexOf(b);
       })[0]!;
     }
 
@@ -212,6 +216,7 @@ export async function buildDraftWorkout(
 
     selectedExercises.push(draftExercise);
     usedSeconds += estimateExerciseSeconds(selectedTemplate, setsToAdd);
+    usedTemplateIds.add(selectedTemplate.id);
 
     // Mark this muscle and all its secondary targets as addressed
     addressedMuscles.add(muscleGroup);
@@ -287,11 +292,46 @@ export async function buildDraftWorkout(
 
   const estimatedMinutes = Math.ceil(usedSeconds / 60);
 
+  // Add warmup and cooldown exercises if requested
+  const finalExercises: DraftWorkoutExercise[] = [];
+
+  if (includeWarmupCooldown) {
+    finalExercises.push({
+      exerciseTemplateId: 'warmup-placeholder',
+      title: 'Warmup',
+      primaryMuscleGroup: 'warmup',
+      isNew: false,
+      daysSinceTrained: null,
+      sets: 1,
+      targetRepsLow: 1,
+      targetRepsHigh: 1,
+      targetReps: 1,
+      suggestedWeightKg: null,
+    });
+  }
+
+  finalExercises.push(...selectedExercises);
+
+  if (includeWarmupCooldown) {
+    finalExercises.push({
+      exerciseTemplateId: 'cooldown-placeholder',
+      title: 'Stretching',
+      primaryMuscleGroup: 'stretching',
+      isNew: false,
+      daysSinceTrained: null,
+      sets: 1,
+      targetRepsLow: 1,
+      targetRepsHigh: 1,
+      targetReps: 1,
+      suggestedWeightKg: null,
+    });
+  }
+
   return {
     location,
     minutesAvailable,
     estimatedMinutes,
     summary,
-    exercises: selectedExercises,
+    exercises: finalExercises,
   };
 }

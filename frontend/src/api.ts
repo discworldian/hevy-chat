@@ -125,23 +125,23 @@ export async function restartPlan(templateId: string) {
   return fetchApi(`/exercises/${templateId}/plan/restart`, { method: 'POST' });
 }
 
-export async function generateDraftWorkout(minutesAvailable: number, location: 'home' | 'gym', includeCardio: boolean = false) {
+export async function generateDraftWorkout(minutesAvailable: number, location: 'home' | 'gym', includeCardio: boolean = false, includeWarmupCooldown: boolean = false) {
   return fetchApi('/draft-workout/generate', {
     method: 'POST',
-    body: JSON.stringify({ minutesAvailable, location, includeCardio }),
+    body: JSON.stringify({ minutesAvailable, location, includeCardio, includeWarmupCooldown }),
   });
 }
 
-export async function previewDraftPush(title: string, exercises: any[], includeWarmup: boolean = true) {
+export async function previewDraftPush(title: string, exercises: any[], includeWarmup: boolean = true, includeWarmupCooldown: boolean = false) {
   return fetchApi('/draft-workout/push/preview', {
     method: 'POST',
-    body: JSON.stringify({ title, exercises, includeWarmup }),
+    body: JSON.stringify({ title, exercises, includeWarmup, includeWarmupCooldown }),
   });
 }
 
-export async function confirmDraftPush(title: string, exercises: any[], previewToken: string, includeWarmup: boolean = true) {
+export async function confirmDraftPush(title: string, exercises: any[], previewToken: string, includeWarmup: boolean = true, includeWarmupCooldown: boolean = false) {
   return fetchApi('/draft-workout/push/confirm', {
     method: 'POST',
-    body: JSON.stringify({ title, exercises, previewToken, includeWarmup }),
+    body: JSON.stringify({ title, exercises, previewToken, includeWarmup, includeWarmupCooldown }),
   });
 }

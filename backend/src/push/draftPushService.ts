@@ -18,8 +18,8 @@ export interface PreviewResult {
   summaryLines: string[];
 }
 
-export function preview(title: string, exercises: DraftWorkoutExercise[], includeWarmup: boolean = true): PreviewResult {
-  const payload = buildCreateRoutinePayload(title, exercises, undefined, includeWarmup);
+export function preview(title: string, exercises: DraftWorkoutExercise[], includeWarmup: boolean = true, includeWarmupCooldown: boolean = false): PreviewResult {
+  const payload = buildCreateRoutinePayload(title, exercises, undefined, includeWarmup, includeWarmupCooldown);
   const token = randomUUID();
   const now = Date.now();
 
@@ -34,14 +34,19 @@ export function preview(title: string, exercises: DraftWorkoutExercise[], includ
   }
 
   // Build human-readable summary
-  const warmupNote = includeWarmup ? ' (+ warmup)' : '';
+  const warmupNote = includeWarmup ? ' (+ warmup sets)' : '';
+  const exerciseCount = exercises.length + (includeWarmupCooldown ? 2 : 0);
   const summaryLines = [
     `Creating routine: "${title}"`,
-    `${exercises.length} exercises, estimated ${Math.round(
+    `${exerciseCount} exercises, estimated ${Math.round(
       exercises.reduce((sum, e) => sum + e.sets * 2, 0) / 60,
     )} minutes${warmupNote}`,
     '',
   ];
+
+  if (includeWarmupCooldown) {
+    summaryLines.push('  Warmup — Dynamic mobility');
+  }
 
   for (const ex of exercises) {
     const weightText = ex.suggestedWeightKg !== null ? ` @ ${ex.suggestedWeightKg}kg` : '';
@@ -52,6 +57,10 @@ export function preview(title: string, exercises: DraftWorkoutExercise[], includ
     );
   }
 
+  if (includeWarmupCooldown) {
+    summaryLines.push('  Stretching — Static stretching');
+  }
+
   return { previewToken: token, summaryLines };
 }
 
@@ -60,6 +69,7 @@ export async function confirmPush(
   exercises: DraftWorkoutExercise[],
   previewToken: string,
   includeWarmup: boolean = true,
+  includeWarmupCooldown: boolean = false,
 ): Promise<{ id: string; title: string }> {
   // Validate token exists and isn't expired
   const stored = PREVIEW_STORE.get(previewToken);
@@ -74,7 +84,7 @@ export async function confirmPush(
   }
 
   // Verify payload matches (sanity check against tampering)
-  const currentPayload = buildCreateRoutinePayload(title, exercises, undefined, includeWarmup);
+  const currentPayload = buildCreateRoutinePayload(title, exercises, undefined, includeWarmup, includeWarmupCooldown);
   if (
     JSON.stringify(currentPayload) !== JSON.stringify(stored.payload)
   ) {

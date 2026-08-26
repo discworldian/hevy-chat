@@ -19,6 +19,7 @@ interface DraftSettings {
   location: 'home' | 'gym';
   includeWarmup: boolean;
   includeCardio: boolean;
+  includeWarmupCooldown: boolean;
 }
 
 export default function DraftWorkoutView({ location: globalLocation }: Props) {
@@ -27,6 +28,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     location: globalLocation,
     includeWarmup: true,
     includeCardio: false,
+    includeWarmupCooldown: false,
   });
   const [draft, setDraft] = useState<DraftWorkout | null>(null);
   const [loading, setLoading] = useState(false);
@@ -58,7 +60,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const result = (await api.generateDraftWorkout(settings.minutesAvailable, settings.location, settings.includeCardio)) as
+      const result = (await api.generateDraftWorkout(settings.minutesAvailable, settings.location, settings.includeCardio, settings.includeWarmupCooldown)) as
         | DraftWorkout
         | { status: 'time_too_short'; minMinutesNeeded: number };
 
@@ -156,6 +158,12 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
   const handleAddExercise = (templateId: string) => {
     if (!draft) return;
 
+    // Prevent adding the same exercise twice
+    if (draft.exercises.some((ex) => ex.exerciseTemplateId === templateId)) {
+      setError('This exercise is already in your draft');
+      return;
+    }
+
     const template = allExercises.find((ex) => ex.templateId === templateId);
     if (!template) return;
 
@@ -176,6 +184,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
       ...draft,
       exercises: [...draft.exercises, newExercise],
     });
+    setError(null); // Clear any previous errors
   };
 
   const handlePreview = async () => {
@@ -187,6 +196,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
         routineTitle,
         draft.exercises,
         settings.includeWarmup,
+        settings.includeWarmupCooldown,
       )) as {
         previewToken: string;
         summaryLines: string[];
@@ -211,6 +221,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
         draft.exercises,
         previewToken,
         settings.includeWarmup,
+        settings.includeWarmupCooldown,
       )) as { id: string; title: string };
       setConfirmedRoutine(result);
       setStep('confirmed');
@@ -309,7 +320,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
                   flexShrink: 0,
                 }}
               />
-              <span style={{ fontSize: '12px' }}>Warm-up</span>
+              <span style={{ fontSize: '12px' }}>Include warm-up sets</span>
             </label>
 
             <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px', whiteSpace: 'nowrap' }}>
@@ -330,6 +341,26 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
                 }}
               />
               <span style={{ fontSize: '12px' }}>Cardio</span>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px', whiteSpace: 'nowrap' }}>
+              <input
+                type="checkbox"
+                checked={settings.includeWarmupCooldown}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    includeWarmupCooldown: e.target.checked,
+                  })
+                }
+                style={{
+                  width: '14px',
+                  height: '14px',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              />
+              <span style={{ fontSize: '12px' }}>Warmup/Cooldown</span>
             </label>
           </div>
         </div>
@@ -592,13 +623,37 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
               }}
             >
               <option value="">+ Add exercise</option>
-              {allExercises.map((ex) => (
-                <option key={ex.templateId} value={ex.templateId}>
-                  {ex.name} ({ex.primaryMuscleGroup})
-                </option>
-              ))}
+              {allExercises.map((ex) => {
+                const alreadySelected = draft.exercises.some((e) => e.exerciseTemplateId === ex.templateId);
+                return (
+                  <option key={ex.templateId} value={ex.templateId} disabled={alreadySelected}>
+                    {ex.name} ({ex.primaryMuscleGroup})
+                    {alreadySelected ? ' ✓' : ''}
+                  </option>
+                );
+              })}
             </select>
           )}
+        </div>
+
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', fontWeight: 500 }}>
+            Routine title
+          </label>
+          <input
+            type="text"
+            value={routineTitle}
+            onChange={(e) => setRoutineTitle(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px',
+              borderRadius: '6px',
+              border: '1px solid var(--border)',
+              backgroundColor: 'var(--bg)',
+              color: 'var(--text)',
+              fontSize: '13px',
+            }}
+          />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -632,26 +687,6 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
           >
             {loading ? 'Preview...' : 'Preview & Push'}
           </button>
-        </div>
-
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginTop: '20px', marginBottom: '8px', fontSize: '12px', fontWeight: 500 }}>
-            Routine title
-          </label>
-          <input
-            type="text"
-            value={routineTitle}
-            onChange={(e) => setRoutineTitle(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px',
-              borderRadius: '6px',
-              border: '1px solid var(--border)',
-              backgroundColor: 'var(--bg)',
-              color: 'var(--text)',
-              fontSize: '13px',
-            }}
-          />
         </div>
       </div>
     );
