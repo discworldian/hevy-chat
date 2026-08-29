@@ -179,6 +179,10 @@ export async function getMuscleVolumeWeekly(weeksBack: number = 2) {
   return fetchApi(`/analytics/muscle-volume-weekly?weeksBack=${weeksBack}`);
 }
 
+export async function getRecentSummary() {
+  return fetchApi(`/analytics/recent-summary`);
+}
+
 export async function getExerciseCycleProgress(templateId: string, cycleId?: string) {
   let url = `/analytics/exercise/${templateId}/cycle-progress`;
   if (cycleId) {

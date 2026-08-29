@@ -11,11 +11,21 @@ interface MuscleVolumeData {
   lastWeek: number;
 }
 
+interface RecentSummary {
+  thisWeekVolume: number;
+  lastWeekVolume: number;
+  volumeTrend: { weekLabel: string; volume: number }[];
+  recentPRs: { exerciseTitle: string; date: string; prType: 'weight' | 'reps' | 'estimated1rm'; daysAgo: number }[];
+  streakWeeks: number;
+}
+
 export default function ChartsView() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [muscleVolumeData, setMuscleVolumeData] = useState<MuscleVolumeData[]>([]);
+  const [recentSummary, setRecentSummary] = useState<RecentSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [radarLoading, setRadarLoading] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [radarError, setRadarError] = useState<string | null>(null);
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
@@ -82,6 +92,22 @@ export default function ChartsView() {
     };
 
     loadRadar();
+  }, []);
+
+  useEffect(() => {
+    const loadRecentSummary = async () => {
+      setSummaryLoading(true);
+      try {
+        const result = (await api.getRecentSummary()) as RecentSummary;
+        setRecentSummary(result);
+      } catch (err: any) {
+        console.error('Failed to load recent summary:', err);
+      } finally {
+        setSummaryLoading(false);
+      }
+    };
+
+    loadRecentSummary();
   }, []);
 
   if (error) return <ErrorBanner message={error} />;
@@ -164,10 +190,24 @@ export default function ChartsView() {
           <div style={{ fontSize: '28px', fontWeight: 600 }}>{totalWorkouts}</div>
         </div>
 
-        <div style={{ padding: '16px', background: 'var(--bg)', borderRadius: '8px' }}>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Total Volume</div>
-          <div style={{ fontSize: '28px', fontWeight: 600 }}>{Math.round(totalVolume).toLocaleString()}kg</div>
-        </div>
+        {recentSummary && (
+          <div style={{ padding: '16px', background: 'var(--bg)', borderRadius: '8px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>This Week Volume</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+              <div style={{ fontSize: '28px', fontWeight: 600 }}>{recentSummary.thisWeekVolume.toLocaleString()}kg</div>
+              {recentSummary.lastWeekVolume > 0 && (
+                <div style={{
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  color: recentSummary.thisWeekVolume > recentSummary.lastWeekVolume ? 'var(--ok)' : 'var(--text-muted)',
+                }}>
+                  {recentSummary.thisWeekVolume > recentSummary.lastWeekVolume ? '↑' : '↓'}
+                  {Math.round(Math.abs((recentSummary.thisWeekVolume - recentSummary.lastWeekVolume) / recentSummary.lastWeekVolume) * 100)}%
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div style={{ padding: '16px', background: 'var(--bg)', borderRadius: '8px' }}>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Last 30 Days</div>
@@ -184,6 +224,31 @@ export default function ChartsView() {
       <div style={{ marginBottom: '24px', paddingBottom: '24px', borderBottom: '1px solid var(--border)' }}>
         <MuscleVolumeRadar data={muscleVolumeData} loading={radarLoading} error={radarError} />
       </div>
+
+      {/* Recent Highlights */}
+      {recentSummary && (
+        <div style={{ marginBottom: '24px', paddingBottom: '24px', borderBottom: '1px solid var(--border)' }}>
+          <h3 style={{ marginBottom: '12px', fontSize: '16px' }}>recent highlights</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {recentSummary.streakWeeks > 0 && (
+              <div style={{ padding: '12px', background: 'var(--bg)', borderRadius: '6px', fontSize: '13px' }}>
+                🔥 <strong>{recentSummary.streakWeeks} week{recentSummary.streakWeeks > 1 ? 's' : ''} streak</strong> — You're consistent!
+              </div>
+            )}
+            {recentSummary.recentPRs.length > 0 ? (
+              recentSummary.recentPRs.map((pr, idx) => (
+                <div key={idx} style={{ padding: '12px', background: 'var(--bg)', borderRadius: '6px', fontSize: '13px' }}>
+                  🎯 New {pr.prType === 'weight' ? 'weight' : pr.prType === 'reps' ? 'rep' : '1RM'} PR — <strong>{pr.exerciseTitle}</strong> ({pr.daysAgo} days ago)
+                </div>
+              ))
+            ) : (
+              <div style={{ padding: '12px', background: 'var(--bg)', borderRadius: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>
+                No recent PRs. Keep training!
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Top Exercises */}
       <div>

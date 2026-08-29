@@ -365,4 +365,158 @@ router.get('/cycle-report', async (req: Request, res: Response) => {
   }
 });
 
+router.get('/recent-summary', async (req: Request, res: Response) => {
+  try {
+    const workoutsCache = await cache.readWorkouts();
+    const templatesCache = await cache.readTemplates();
+    const now = new Date();
+
+    // Compute this week and last week volumes
+    const thisWeekEnd = new Date(now);
+    thisWeekEnd.setHours(23, 59, 59, 999);
+    const thisWeekStart = new Date(thisWeekEnd);
+    thisWeekStart.setDate(thisWeekStart.getDate() - 6);
+    thisWeekStart.setHours(0, 0, 0, 0);
+
+    const lastWeekEnd = new Date(thisWeekStart);
+    lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+    lastWeekEnd.setHours(23, 59, 59, 999);
+    const lastWeekStart = new Date(lastWeekEnd);
+    lastWeekStart.setDate(lastWeekStart.getDate() - 6);
+    lastWeekStart.setHours(0, 0, 0, 0);
+
+    const getVolumeForRange = (startDate: Date, endDate: Date): number => {
+      const startMs = startDate.getTime();
+      const endMs = endDate.getTime();
+      return workoutsCache.workouts
+        .filter((w) => {
+          const wTime = new Date(w.start_time).getTime();
+          return wTime >= startMs && wTime <= endMs;
+        })
+        .reduce((sum, w) => {
+          return (
+            sum +
+            w.exercises.reduce((exSum, ex) => {
+              return (
+                exSum +
+                ex.sets.reduce((setSum: number, set: any) => {
+                  if (set.type !== 'warmup' && set.weight_kg && set.reps) {
+                    return setSum + set.weight_kg * set.reps;
+                  }
+                  return setSum;
+                }, 0)
+              );
+            }, 0)
+          );
+        }, 0);
+    };
+
+    const thisWeekVolume = getVolumeForRange(thisWeekStart, thisWeekEnd);
+    const lastWeekVolume = getVolumeForRange(lastWeekStart, lastWeekEnd);
+
+    // Volume trend: 8 weeks back
+    const volumeTrend: { weekLabel: string; volume: number }[] = [];
+    for (let i = 7; i >= 0; i--) {
+      const weekEnd = new Date(now);
+      weekEnd.setDate(weekEnd.getDate() - i * 7);
+      weekEnd.setHours(23, 59, 59, 999);
+      const weekStart = new Date(weekEnd);
+      weekStart.setDate(weekStart.getDate() - 6);
+      weekStart.setHours(0, 0, 0, 0);
+      const volume = getVolumeForRange(weekStart, weekEnd);
+      const weekLabel = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      volumeTrend.push({ weekLabel, volume });
+    }
+
+    // Recent PRs: exercises trained in last 14 days
+    const twoWeeksAgoMs = now.getTime() - 14 * 24 * 60 * 60 * 1000;
+    const recentWorkouts = workoutsCache.workouts.filter((w) => new Date(w.start_time).getTime() >= twoWeeksAgoMs);
+
+    interface ExerciseSession {
+      templateId: string;
+      title: string;
+      date: string;
+      sets: any[];
+    }
+    const exerciseSessions: Record<string, ExerciseSession[]> = {};
+
+    for (const workout of recentWorkouts) {
+      for (const exercise of workout.exercises) {
+        if (!exerciseSessions[exercise.exercise_template_id]) {
+          exerciseSessions[exercise.exercise_template_id] = [];
+        }
+        exerciseSessions[exercise.exercise_template_id].push({
+          templateId: exercise.exercise_template_id,
+          title: exercise.title,
+          date: workout.start_time.split('T')[0],
+          sets: exercise.sets.filter((s: any) => s.type === 'normal' || s.type === 'dropset'),
+        });
+      }
+    }
+
+    // Check for PRs
+    interface RecentPR {
+      exerciseTitle: string;
+      date: string;
+      prType: 'weight' | 'reps' | 'estimated1rm';
+      daysAgo: number;
+    }
+    const recentPRs: RecentPR[] = [];
+
+    for (const [templateId, sessions] of Object.entries(exerciseSessions)) {
+      if (sessions.length === 0) continue;
+      sessions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      const lastSession = sessions[sessions.length - 1];
+      const prData = checkPersonalRecord(
+        lastSession.sets as any,
+        sessions as any,
+      );
+
+      if (prData.isPersonalRecord) {
+        const daysAgo = Math.floor((now.getTime() - new Date(lastSession.date).getTime()) / (24 * 60 * 60 * 1000));
+        recentPRs.push({
+          exerciseTitle: lastSession.title,
+          date: lastSession.date,
+          prType: prData.prType || 'weight',
+          daysAgo,
+        });
+      }
+    }
+
+    // Sort by date descending, take top 3
+    recentPRs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const topRecentPRs = recentPRs.slice(0, 3);
+
+    // Streak: consecutive trailing weeks with at least one workout
+    let streakWeeks = 0;
+    for (let i = 0; i < 52; i++) {
+      const weekEnd = new Date(now);
+      weekEnd.setDate(weekEnd.getDate() - i * 7);
+      weekEnd.setHours(23, 59, 59, 999);
+      const weekStart = new Date(weekEnd);
+      weekStart.setDate(weekStart.getDate() - 6);
+      weekStart.setHours(0, 0, 0, 0);
+
+      const weekWorkouts = workoutsCache.workouts.filter((w) => {
+        const wTime = new Date(w.start_time).getTime();
+        return wTime >= weekStart.getTime() && wTime <= weekEnd.getTime();
+      });
+
+      if (weekWorkouts.length === 0) break;
+      streakWeeks++;
+    }
+
+    res.json({
+      thisWeekVolume: Math.round(thisWeekVolume),
+      lastWeekVolume: Math.round(lastWeekVolume),
+      volumeTrend,
+      recentPRs: topRecentPRs,
+      streakWeeks,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message, retryable: true });
+  }
+});
+
 export default router;
