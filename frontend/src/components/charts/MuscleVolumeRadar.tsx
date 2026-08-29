@@ -19,8 +19,8 @@ interface Props {
   error?: string | null;
 }
 
-// Curved region labels component
-function RegionLabels() {
+// Region labels overlay (outside recharts, positioned absolutely)
+function RegionLabelsOverlay() {
   const regions = [
     { name: 'UPPER', angle: 90, color: 'var(--accent)' },
     { name: 'LOWER', angle: 270, color: 'var(--ok)' },
@@ -28,14 +28,25 @@ function RegionLabels() {
   ];
 
   return (
-    <g>
+    <svg
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+      }}
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+    >
       {regions.map((region) => (
         <g key={region.name} transform={`rotate(${region.angle} 50 50)`}>
           <text
             x={50}
-            y={8}
+            y={5}
             textAnchor="middle"
-            fontSize="11"
+            fontSize="10"
             fontWeight="600"
             fill={region.color}
             opacity="0.7"
@@ -45,7 +56,7 @@ function RegionLabels() {
           </text>
         </g>
       ))}
-    </g>
+    </svg>
   );
 }
 
@@ -79,7 +90,7 @@ export default function MuscleVolumeRadar({ data, title = 'Muscle Volume Compari
       <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px', color: 'var(--text)' }}>
         {title}
       </div>
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative', height: 300 }}>
         <ResponsiveContainer width="100%" height={300}>
           <RadarChart data={data} margin={{ top: 30, right: 30, bottom: 30, left: 30 }}>
             <PolarGrid stroke="var(--border)" />
@@ -94,12 +105,12 @@ export default function MuscleVolumeRadar({ data, title = 'Muscle Volume Compari
               }}
               formatter={(value: any) => (typeof value === 'number' ? value.toFixed(0) : value)}
             />
-            <Radar name="This Week" dataKey="thisWeek" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.5} />
-            <Radar name="Last Week" dataKey="lastWeek" stroke="var(--text-muted)" fill="transparent" strokeDasharray="5 5" />
-            <RegionLabels />
+            <Radar name="this week" dataKey="thisWeek" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.5} />
+            <Radar name="last week" dataKey="lastWeek" stroke="var(--text-muted)" fill="transparent" strokeDasharray="5 5" />
             <Legend wrapperStyle={{ fontSize: '12px', color: 'var(--text)' }} />
           </RadarChart>
         </ResponsiveContainer>
+        <RegionLabelsOverlay />
       </div>
     </div>
   );

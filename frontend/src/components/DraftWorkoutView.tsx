@@ -6,6 +6,7 @@ import NudgeBanner from './NudgeBanner.jsx';
 import CycleSetupView from './CycleSetupView.jsx';
 import HierarchicalExerciseSelector from './HierarchicalExerciseSelector.jsx';
 import { formatMuscleLabel } from '../utils/muscle.js';
+import { isCardioExercise } from '../utils/exercise.js';
 
 interface Props {
   location: 'home' | 'gym';
@@ -773,92 +774,18 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', fontSize: '13px' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                        <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Sets</label>
-                        {ex.useDropSets && (
-                          <span
-                            style={{
-                              fontSize: '10px',
-                              fontWeight: 600,
-                              padding: '2px 6px',
-                              backgroundColor: 'var(--accent)',
-                              color: 'white',
-                              borderRadius: '3px',
-                            }}
-                          >
-                            DS
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        style={{
-                          width: '100%',
-                          padding: '6px',
-                          borderRadius: '4px',
-                          border: '1px solid var(--border)',
-                          backgroundColor: 'var(--bg-secondary)',
-                          color: 'var(--text)',
-                          fontSize: '13px',
-                        }}
-                      >
-                        {ex.useDropSets ? '1 working + 2 drop' : ex.sets + ' sets'}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                        Reps
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="50"
-                        value={ex.targetReps}
-                        onChange={(e) => handleUpdateExercise(idx, 'targetReps', parseInt(e.target.value) || 10)}
-                        style={{
-                          width: '100%',
-                          padding: '6px',
-                          borderRadius: '4px',
-                          border: '1px solid var(--border)',
-                          backgroundColor: 'var(--bg-secondary)',
-                          color: 'var(--text)',
-                          fontSize: '13px',
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                        Weight (kg)
-                      </label>
-                      {ex.suggestedWeightKg === null ? (
-                        <div
-                          style={{
-                            width: '100%',
-                            padding: '6px',
-                            borderRadius: '4px',
-                            border: '1px solid var(--border)',
-                            backgroundColor: 'var(--border)',
-                            color: 'var(--text-muted)',
-                            fontSize: '13px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            minHeight: '34px',
-                          }}
-                        >
-                          Bodyweight
-                        </div>
-                      ) : (
+                  {isCardioExercise({ primaryMuscleGroup: ex.primaryMuscleGroup } as ExerciseTemplate) ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '13px' }}>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                          Duration (min)
+                        </label>
                         <input
                           type="number"
-                          step="0.5"
-                          min="0"
-                          value={ex.suggestedWeightKg}
-                          onChange={(e) =>
-                            handleUpdateExercise(idx, 'suggestedWeightKg', e.target.value ? parseFloat(e.target.value) : null)
-                          }
+                          min="1"
+                          step="1"
+                          value={ex.suggestedWeightKg || ''}
+                          onChange={(e) => handleUpdateExercise(idx, 'suggestedWeightKg', e.target.value ? parseFloat(e.target.value) : null)}
                           style={{
                             width: '100%',
                             padding: '6px',
@@ -869,9 +796,132 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
                             fontSize: '13px',
                           }}
                         />
-                      )}
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                          Distance (km)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={ex.targetReps || ''}
+                          onChange={(e) => handleUpdateExercise(idx, 'targetReps', e.target.value ? parseInt(e.target.value) : null)}
+                          placeholder="Optional"
+                          style={{
+                            width: '100%',
+                            padding: '6px',
+                            borderRadius: '4px',
+                            border: '1px solid var(--border)',
+                            backgroundColor: 'var(--bg-secondary)',
+                            color: 'var(--text)',
+                            fontSize: '13px',
+                          }}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', fontSize: '13px' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                          <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Sets</label>
+                          {ex.useDropSets && (
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                padding: '2px 6px',
+                                backgroundColor: 'var(--accent)',
+                                color: 'white',
+                                borderRadius: '3px',
+                              }}
+                            >
+                              DS
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            width: '100%',
+                            padding: '6px',
+                            borderRadius: '4px',
+                            border: '1px solid var(--border)',
+                            backgroundColor: 'var(--bg-secondary)',
+                            color: 'var(--text)',
+                            fontSize: '13px',
+                          }}
+                        >
+                          {ex.useDropSets ? '1 working + 2 drop' : ex.sets + ' sets'}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                          Reps
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="50"
+                          value={ex.targetReps}
+                          onChange={(e) => handleUpdateExercise(idx, 'targetReps', parseInt(e.target.value) || 10)}
+                          style={{
+                            width: '100%',
+                            padding: '6px',
+                            borderRadius: '4px',
+                            border: '1px solid var(--border)',
+                            backgroundColor: 'var(--bg-secondary)',
+                            color: 'var(--text)',
+                            fontSize: '13px',
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                          Weight (kg)
+                        </label>
+                        {ex.suggestedWeightKg === null ? (
+                          <div
+                            style={{
+                              width: '100%',
+                              padding: '6px',
+                              borderRadius: '4px',
+                              border: '1px solid var(--border)',
+                              backgroundColor: 'var(--border)',
+                              color: 'var(--text-muted)',
+                              fontSize: '13px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              minHeight: '34px',
+                            }}
+                          >
+                            Bodyweight
+                          </div>
+                        ) : (
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            value={ex.suggestedWeightKg}
+                            onChange={(e) =>
+                              handleUpdateExercise(idx, 'suggestedWeightKg', e.target.value ? parseFloat(e.target.value) : null)
+                            }
+                            style={{
+                              width: '100%',
+                              padding: '6px',
+                              borderRadius: '4px',
+                              border: '1px solid var(--border)',
+                              backgroundColor: 'var(--bg-secondary)',
+                              color: 'var(--text)',
+                              fontSize: '13px',
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Warm-up set section */}
                   <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: '12px', marginTop: '12px' }}>
