@@ -6,6 +6,8 @@ import { analyzeExercise } from './exerciseAnalysis.js';
 import { computeMuscleRecency, rankMuscleGroups } from './muscleGroups.js';
 import { estimateExerciseSeconds, EXERCISE_SETUP_OVERHEAD_SECONDS, SECONDS_PER_SET } from './exerciseTimeEstimate.js';
 import { canExerciseBePerformed } from '../equipment/exerciseEquipmentMap.js';
+import type { SplitDay } from './splitDefinitions.js';
+import { getMuscleGroupsForSplit, ANY_DAY_MUSCLE_GROUPS } from './splitDefinitions.js';
 
 const MUSCLE_GROUP_REGION: Record<string, 'upper' | 'lower' | 'core'> = {
   quadriceps: 'lower', glutes: 'lower', hamstrings: 'lower', calves: 'lower', lower_back: 'lower',
@@ -41,6 +43,7 @@ type DraftWorkoutError = { status: 'time_too_short'; minMinutesNeeded: number };
 export async function buildDraftWorkout(
   minutesAvailable: number,
   location: Location,
+  splitDay: SplitDay,
   includeCardio: boolean = false,
   includeWarmupCooldown: boolean = false,
 ): Promise<DraftWorkout | DraftWorkoutError> {
@@ -66,6 +69,10 @@ export async function buildDraftWorkout(
   if (!includeCardio) {
     rankedMuscles = rankedMuscles.filter((m) => m !== 'cardio');
   }
+
+  // Filter to split day muscles + any-day muscles, preserving staleness order
+  const splitMuscles = new Set([...getMuscleGroupsForSplit(splitDay), ...ANY_DAY_MUSCLE_GROUPS]);
+  rankedMuscles = rankedMuscles.filter((m) => splitMuscles.has(m));
 
   // Track which muscles are addressed by the draft
   const addressedMuscles = new Set<string>();
@@ -234,23 +241,29 @@ export async function buildDraftWorkout(
   if (remainingSeconds >= perSetIsolationSeconds && selectedExercises.length > 0) {
     let bonusSetIndex = 0;
     let bonusSecsUsed = 0;
+    let cyclesWithoutAddingSet = 0;
 
-    while (bonusSecsUsed + perSetIsolationSeconds <= remainingSeconds && bonusSetIndex < selectedExercises.length) {
+    while (bonusSecsUsed + perSetIsolationSeconds <= remainingSeconds) {
       const exercise = selectedExercises[bonusSetIndex];
 
       // Cap at 5 total sets per exercise
       if (exercise.sets < 5) {
         exercise.sets += 1;
         bonusSecsUsed += perSetIsolationSeconds;
+        cyclesWithoutAddingSet = 0;
+      } else {
+        cyclesWithoutAddingSet++;
       }
 
       bonusSetIndex = (bonusSetIndex + 1) % selectedExercises.length;
 
-      // Break if we've cycled through all exercises and added at least one set each
-      if (bonusSetIndex === 0 && bonusSecsUsed > 0) {
-        break; // Stop cycling; simpler logic than tracking which got bonus
+      // Break if we've cycled through all exercises without adding a set (all at max 5)
+      if (cyclesWithoutAddingSet >= selectedExercises.length) {
+        break;
       }
     }
+
+    usedSeconds += bonusSecsUsed;
   }
 
   // Build summary

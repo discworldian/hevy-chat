@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import type { Location } from '../equipment/equipmentTypes.js';
+import type { SplitDay } from '../analysis/splitDefinitions.js';
 import { buildDraftWorkout, type DraftWorkoutExercise } from '../analysis/draftWorkoutBuilder.js';
 import * as pushService from '../push/draftPushService.js';
 
@@ -7,7 +8,7 @@ const router = Router();
 
 router.post('/generate', async (req: Request, res: Response) => {
   try {
-    const { minutesAvailable, location, includeCardio, includeWarmupCooldown } = req.body;
+    const { minutesAvailable, location, splitDay, includeCardio, includeWarmupCooldown } = req.body;
 
     if (typeof minutesAvailable !== 'number' || minutesAvailable <= 0) {
       return res.status(400).json({ error: 'minutesAvailable must be a positive number' });
@@ -17,7 +18,11 @@ router.post('/generate', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'location must be "home" or "gym"' });
     }
 
-    const result = await buildDraftWorkout(minutesAvailable, location as Location, includeCardio === true, includeWarmupCooldown === true);
+    if (splitDay !== 'push' && splitDay !== 'pull' && splitDay !== 'legs') {
+      return res.status(400).json({ error: 'splitDay must be "push", "pull", or "legs"' });
+    }
+
+    const result = await buildDraftWorkout(minutesAvailable, location as Location, splitDay as SplitDay, includeCardio === true, includeWarmupCooldown === true);
 
     res.json(result);
   } catch (err: any) {

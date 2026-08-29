@@ -17,6 +17,7 @@ interface SwapState {
 interface DraftSettings {
   minutesAvailable: number;
   location: 'home' | 'gym';
+  splitDay: 'push' | 'pull' | 'legs';
   includeWarmup: boolean;
   includeCardio: boolean;
   includeWarmupCooldown: boolean;
@@ -26,6 +27,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
   const [settings, setSettings] = useState<DraftSettings>({
     minutesAvailable: 45,
     location: globalLocation,
+    splitDay: 'push',
     includeWarmup: true,
     includeCardio: false,
     includeWarmupCooldown: false,
@@ -60,7 +62,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const result = (await api.generateDraftWorkout(settings.minutesAvailable, settings.location, settings.includeCardio, settings.includeWarmupCooldown)) as
+      const result = (await api.generateDraftWorkout(settings.minutesAvailable, settings.location, settings.splitDay, settings.includeCardio, settings.includeWarmupCooldown)) as
         | DraftWorkout
         | { status: 'time_too_short'; minMinutesNeeded: number };
 
@@ -297,6 +299,31 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
                 onClick={() => setSettings({ ...settings, location: 'gym' })}
               >
                 Gym
+              </button>
+            </div>
+          </div>
+
+          {/* Split day toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ fontSize: '13px', fontWeight: 500, whiteSpace: 'nowrap' }}>Split</label>
+            <div className="location-toggle">
+              <button
+                className={settings.splitDay === 'push' ? 'active' : ''}
+                onClick={() => setSettings({ ...settings, splitDay: 'push' })}
+              >
+                Push
+              </button>
+              <button
+                className={settings.splitDay === 'pull' ? 'active' : ''}
+                onClick={() => setSettings({ ...settings, splitDay: 'pull' })}
+              >
+                Pull
+              </button>
+              <button
+                className={settings.splitDay === 'legs' ? 'active' : ''}
+                onClick={() => setSettings({ ...settings, splitDay: 'legs' })}
+              >
+                Legs
               </button>
             </div>
           </div>
