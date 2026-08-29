@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as api from '../api.js';
+import { isCardioExercise } from '../utils/exercise.js';
 import { formatMuscleLabel } from '../utils/muscle.js';
 import type { Workout, WorkoutAdvice } from '../types.js';
 import ErrorBanner from './ErrorBanner.jsx';
@@ -600,40 +601,65 @@ export default function HistoryView({ location }: Props) {
                                         </div>
                                       )}
                                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                                        {nonWarmupSets.length} sets •{' '}
-                                        {nonWarmupSets
-                                          .filter((s: any) => s.reps)
-                                          .map((s: any) => `${s.reps}`)
-                                          .join(', ')} reps •{' '}
-                                        {ex.sets.find((s: any) => s.weight_kg)?.weight_kg}kg
-                                        {avgRPE && <span> • RPE: {avgRPE}</span>}
+                                        {isCardioExercise({ primaryMuscleGroup: muscleGroupMap[ex.exercise_template_id] } as any) ? (
+                                          <>
+                                            {nonWarmupSets.length} session{nonWarmupSets.length !== 1 ? 's' : ''} •{' '}
+                                            {nonWarmupSets
+                                              .filter((s: any) => s.duration_seconds)
+                                              .map((s: any) => Math.round(s.duration_seconds / 60))
+                                              .join(', ')}{' '}
+                                            min
+                                            {nonWarmupSets.some((s: any) => s.distance_meters) && (
+                                              <>
+                                                {' '}
+                                                • {nonWarmupSets
+                                                  .filter((s: any) => s.distance_meters)
+                                                  .map((s: any) => (s.distance_meters / 1000).toFixed(1))
+                                                  .join(', ')}{' '}
+                                                km
+                                              </>
+                                            )}
+                                          </>
+                                        ) : (
+                                          <>
+                                            {nonWarmupSets.length} sets •{' '}
+                                            {nonWarmupSets
+                                              .filter((s: any) => s.reps)
+                                              .map((s: any) => `${s.reps}`)
+                                              .join(', ')} reps •{' '}
+                                            {ex.sets.find((s: any) => s.weight_kg)?.weight_kg}kg
+                                            {avgRPE && <span> • RPE: {avgRPE}</span>}
+                                          </>
+                                        )}
                                       </div>
                                     </div>
-                                    <div style={{ display: 'flex', gap: '3px', alignItems: 'flex-end', flexShrink: 0, minHeight: '36px' }}>
-                                      {nonWarmupSets.map((set: any, idx: any) => {
-                                        const heightPercent = set.reps ? (set.reps / maxReps) * 100 : 50;
-                                        const minHeight = 8;
-                                        const maxHeight = 36;
-                                        const height = minHeight + (heightPercent / 100) * (maxHeight - minHeight);
+                                    {!isCardioExercise({ primaryMuscleGroup: muscleGroupMap[ex.exercise_template_id] } as any) && (
+                                      <div style={{ display: 'flex', gap: '3px', alignItems: 'flex-end', flexShrink: 0, minHeight: '36px' }}>
+                                        {nonWarmupSets.map((set: any, idx: any) => {
+                                          const heightPercent = set.reps ? (set.reps / maxReps) * 100 : 50;
+                                          const minHeight = 8;
+                                          const maxHeight = 36;
+                                          const height = minHeight + (heightPercent / 100) * (maxHeight - minHeight);
 
-                                        return (
-                                          <div
-                                            key={idx}
-                                            style={{
-                                              width: '14px',
-                                              height: `${height}px`,
-                                              background: getRPEColor(set.rpe),
-                                              borderRadius: '2px',
-                                              border: '1px solid var(--border)',
-                                              opacity: set.rpe ? 1 : 0.2,
-                                              cursor: 'help',
-                                              transition: 'all 0.2s ease',
-                                            }}
-                                            title={`${set.reps || 0} reps${set.rpe ? ` • RPE ${set.rpe}` : ''}`}
-                                          />
-                                        );
-                                      })}
-                                    </div>
+                                          return (
+                                            <div
+                                              key={idx}
+                                              style={{
+                                                width: '14px',
+                                                height: `${height}px`,
+                                                background: getRPEColor(set.rpe),
+                                                borderRadius: '2px',
+                                                border: '1px solid var(--border)',
+                                                opacity: set.rpe ? 1 : 0.2,
+                                                cursor: 'help',
+                                                transition: 'all 0.2s ease',
+                                              }}
+                                              title={`${set.reps || 0} reps${set.rpe ? ` • RPE ${set.rpe}` : ''}`}
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -647,6 +673,9 @@ export default function HistoryView({ location }: Props) {
                   {activeTab === 'stats' && (() => {
                     const duration = Math.round((new Date(w.end_time).getTime() - new Date(w.start_time).getTime()) / 60000);
                     const totalVolume = w.exercises.reduce((sum: any, ex: any) => {
+                      if (isCardioExercise({ primaryMuscleGroup: muscleGroupMap[ex.exercise_template_id] } as any)) {
+                        return sum;
+                      }
                       return sum + ex.sets.reduce((exSum: any, set: any) => {
                         if (set.type !== 'warmup' && set.weight_kg && set.reps) {
                           return exSum + set.weight_kg * set.reps;
@@ -655,9 +684,12 @@ export default function HistoryView({ location }: Props) {
                       }, 0);
                     }, 0);
                     const heaviest = Math.max(
-                      ...w.exercises.flatMap((ex: any) =>
-                        ex.sets.filter((s: any) => s.type !== 'warmup').map((s: any) => s.weight_kg || 0),
-                      ),
+                      ...w.exercises
+                        .filter((ex: any) => !isCardioExercise({ primaryMuscleGroup: muscleGroupMap[ex.exercise_template_id] } as any))
+                        .flatMap((ex: any) =>
+                          ex.sets.filter((s: any) => s.type !== 'warmup').map((s: any) => s.weight_kg || 0),
+                        ),
+                      0,
                     );
                     const avgRpe = (() => {
                       const rpes = w.exercises
