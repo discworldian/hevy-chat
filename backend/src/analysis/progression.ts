@@ -60,7 +60,7 @@ function getAverageVolume(sessions: SessionData[], lookbackCount: number = 3): n
   return totalVolume / recentSessions.length;
 }
 
-function checkPersonalRecord(
+export function checkPersonalRecord(
   sets: WorkoutSet[],
   allSessions: SessionData[],
 ): { isPersonalRecord: boolean; prType?: 'weight' | 'reps' | 'estimated1rm' } {

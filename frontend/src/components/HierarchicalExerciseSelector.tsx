@@ -1,10 +1,15 @@
 import { useMemo, useState } from 'react';
 import type { ExerciseTemplate, DraftWorkoutExercise } from '../types.js';
+import { formatMuscleLabel } from '../utils/muscle.js';
 
 interface Props {
   allExercises: ExerciseTemplate[];
   selectedExercises: DraftWorkoutExercise[];
-  onSelectExercise: (templateId: string) => void;
+  onSelectExercise?: (templateId: string) => void;
+  onToggleExercise?: (templateId: string) => void;
+  allowedMuscleGroups?: string[];
+  initialMuscleGroup?: string;
+  mode?: 'single' | 'multi';
 }
 
 // Categorize exercise by movement type based on title
@@ -16,11 +21,25 @@ function getMovementType(title: string): string {
   if (/curl|bicep/i.test(lower)) return 'curl';
   if (/extension|tricep|overhead/i.test(lower)) return 'extension';
   if (/raise|lateral|front/i.test(lower)) return 'raise';
+  if (/squat/i.test(lower)) return 'squat';
+  if (/deadlift|hinge|good morning/i.test(lower)) return 'deadlift';
+  if (/lunge|split squat|step.?up/i.test(lower)) return 'lunge';
+  if (/thrust|bridge/i.test(lower)) return 'thrust';
+  if (/shrug/i.test(lower)) return 'shrug';
+  if (/carry|farmer/i.test(lower)) return 'carry';
   return 'other';
 }
 
-export default function HierarchicalExerciseSelector({ allExercises, selectedExercises, onSelectExercise }: Props) {
-  const [selectedMuscleGroup, setSelectedMuscleGroup] = useState<string | null>(null);
+export default function HierarchicalExerciseSelector({
+  allExercises,
+  selectedExercises,
+  onSelectExercise,
+  onToggleExercise,
+  allowedMuscleGroups,
+  initialMuscleGroup,
+  mode = 'single',
+}: Props) {
+  const [selectedMuscleGroup, setSelectedMuscleGroup] = useState<string | null>(initialMuscleGroup || null);
   const [selectedMovementType, setSelectedMovementType] = useState<string | null>(null);
 
   const selectedTemplateIds = useMemo(() => {
@@ -40,10 +59,14 @@ export default function HierarchicalExerciseSelector({ allExercises, selectedExe
     return map;
   }, [allExercises]);
 
-  // Get sorted muscle groups
+  // Get sorted muscle groups, filtered by allowedMuscleGroups if provided
   const muscleGroups = useMemo(() => {
-    return Array.from(muscleGroupMap.keys()).sort();
-  }, [muscleGroupMap]);
+    let groups = Array.from(muscleGroupMap.keys()).sort();
+    if (allowedMuscleGroups && allowedMuscleGroups.length > 0) {
+      groups = groups.filter((g) => allowedMuscleGroups.includes(g));
+    }
+    return groups;
+  }, [muscleGroupMap, allowedMuscleGroups]);
 
   // Get movement types for selected muscle group
   const movementTypes = useMemo(() => {
@@ -64,10 +87,20 @@ export default function HierarchicalExerciseSelector({ allExercises, selectedExe
   }, [selectedMuscleGroup, selectedMovementType, muscleGroupMap]);
 
   const handleSelectExercise = (templateId: string) => {
-    onSelectExercise(templateId);
-    // Reset dropdowns after selection
-    setSelectedMuscleGroup(null);
-    setSelectedMovementType(null);
+    if (onSelectExercise) {
+      onSelectExercise(templateId);
+      // Reset dropdowns after selection in single mode
+      if (mode === 'single') {
+        setSelectedMuscleGroup(null);
+        setSelectedMovementType(null);
+      }
+    }
+  };
+
+  const handleToggleExercise = (templateId: string) => {
+    if (onToggleExercise) {
+      onToggleExercise(templateId);
+    }
   };
 
   return (
@@ -97,7 +130,7 @@ export default function HierarchicalExerciseSelector({ allExercises, selectedExe
           <option value="">Select muscle group...</option>
           {muscleGroups.map((group) => (
             <option key={group} value={group}>
-              {group.charAt(0).toUpperCase() + group.slice(1)}
+              {formatMuscleLabel(group)}
             </option>
           ))}
         </select>
@@ -127,7 +160,7 @@ export default function HierarchicalExerciseSelector({ allExercises, selectedExe
         )}
 
         {/* Level 3: Exercise Name */}
-        {selectedMovementType && (
+        {selectedMovementType && mode === 'single' && (
           <select
             onChange={(e) => {
               if (e.target.value) {
@@ -157,6 +190,38 @@ export default function HierarchicalExerciseSelector({ allExercises, selectedExe
               );
             })}
           </select>
+        )}
+
+        {/* Level 3: Exercise Checkboxes (multi mode) */}
+        {selectedMovementType && mode === 'multi' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {filteredExercises.map((ex) => {
+              const isSelected = selectedTemplateIds.has(ex.templateId);
+              return (
+                <label
+                  key={ex.templateId}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '6px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    backgroundColor: isSelected ? 'var(--accent-faded)' : 'var(--bg-secondary)',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => handleToggleExercise(ex.templateId)}
+                    style={{ marginRight: '8px', cursor: 'pointer' }}
+                  />
+                  <span>{ex.name}</span>
+                </label>
+              );
+            })}
+          </div>
         )}
       </div>
 

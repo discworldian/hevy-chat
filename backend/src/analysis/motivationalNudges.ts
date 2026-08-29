@@ -122,7 +122,7 @@ export async function generateNudges(context: GenerateNudgesContext): Promise<st
     if (maxPctChange > 0.1 && trendMuscle) {
       nudges.push({
         type: 'volume_trend',
-        message: `Your ${trendMuscle} volume is up ${(maxPctChange * 100).toFixed(0)}% this week. That's progress.`,
+        message: `Your ${trendMuscle.split('_').join(' ')} volume is up ${(maxPctChange * 100).toFixed(0)}% this week. That's progress.`,
         priority: 70,
       });
     }

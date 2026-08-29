@@ -1,6 +1,8 @@
 import type { Workout, ExerciseTemplate } from '../hevyTypes.js';
 
+// Organized by body region for radar chart visualization
 export const MUSCLE_GROUP_AXES = [
+  // Upper body (8 muscles, ~53% of circle)
   'chest',
   'shoulders',
   'triceps',
@@ -9,14 +11,23 @@ export const MUSCLE_GROUP_AXES = [
   'traps',
   'biceps',
   'forearms',
+  // Lower body (5 muscles, ~33% of circle)
   'quadriceps',
   'glutes',
   'hamstrings',
   'calves',
   'lower_back',
-  'adductors',
+  // Core (1 muscle, ~7% of circle)
   'abdominals',
+  // Accessory (1 muscle, ~7% of circle)
+  'adductors',
 ];
+
+export const MUSCLE_REGIONS = {
+  upper: ['chest', 'shoulders', 'triceps', 'lats', 'upper_back', 'traps', 'biceps', 'forearms'],
+  lower: ['quadriceps', 'glutes', 'hamstrings', 'calves', 'lower_back'],
+  core: ['abdominals', 'adductors'],
+};
 
 export function computeMuscleVolumeForRange(
   workouts: Workout[],

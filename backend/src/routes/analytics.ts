@@ -2,9 +2,10 @@ import { Router, type Request, type Response } from 'express';
 import * as cache from '../cache.js';
 import { computeMuscleVolumeForRange, MUSCLE_GROUP_AXES } from '../analysis/muscleVolume.js';
 import { getCurrentCycle, getCycleById, getWorkoutsInRange } from '../analysis/cycleManager.js';
-import { computeEstimated1RM } from '../analysis/progression.js';
+import { computeEstimated1RM, checkPersonalRecord } from '../analysis/progression.js';
 import { getAnimalComparison } from '../analysis/animalComparison.js';
 import { SCIENCE_TIDBITS } from '../analysis/motivationalNudges.js';
+import type { Workout } from '../hevyTypes.js';
 
 const router = Router();
 

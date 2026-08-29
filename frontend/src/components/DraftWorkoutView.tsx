@@ -5,6 +5,7 @@ import ErrorBanner from './ErrorBanner.jsx';
 import NudgeBanner from './NudgeBanner.jsx';
 import CycleSetupView from './CycleSetupView.jsx';
 import HierarchicalExerciseSelector from './HierarchicalExerciseSelector.jsx';
+import { formatMuscleLabel } from '../utils/muscle.js';
 
 interface Props {
   location: 'home' | 'gym';
@@ -37,7 +38,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     includeCardio: false,
     includeAbdominals: false,
     includeWarmupCooldown: false,
-    draftMode: 'single',
+    draftMode: 'cycle',
   });
   const [draft, setDraft] = useState<DraftWorkout | DraftWorkout[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -149,33 +150,10 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     }
   };
 
-  const findAlternatives = (exerciseIndex: number): ExerciseTemplate[] => {
-    if (!draft || Array.isArray(draft)) return [];
-    if (exerciseIndex >= (draft as DraftWorkout).exercises.length) return [];
-
-    const current = draft.exercises[exerciseIndex];
-    const selectedIds = new Set((draft as DraftWorkout).exercises.map((ex: any) => ex.exerciseTemplateId));
-
-    // Find exercises that target the same primary muscle group
-    const alternatives = allExercises.filter((ex) => {
-      if (selectedIds.has(ex.templateId) && ex.templateId !== current.exerciseTemplateId) {
-        return false; // Already selected (and not the current one)
-      }
-      if (ex.templateId === current.exerciseTemplateId) {
-        return false; // Same as current
-      }
-      if (ex.primaryMuscleGroup !== current.primaryMuscleGroup) {
-        return false; // Different muscle group
-      }
-      return true;
-    });
-
-    return alternatives;
-  };
-
   const handleSwapExercise = (exerciseIndex: number) => {
-    const alternatives = findAlternatives(exerciseIndex);
-    setSwapState({ exerciseIndex, alternatives });
+    if (!draft || Array.isArray(draft)) return;
+    const current = draft.exercises[exerciseIndex];
+    setSwapState({ exerciseIndex, alternatives: [] });
   };
 
   const handleConfirmSwap = (newTemplateId: string) => {
@@ -760,7 +738,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
                     <div>
                       <div style={{ fontWeight: 500, fontSize: '14px' }}>{ex.title}</div>
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        {ex.primaryMuscleGroup} {ex.isNew && '[NEW]'} {ex.daysSinceTrained !== null && `(${ex.daysSinceTrained}d ago)`}
+                        {formatMuscleLabel(ex.primaryMuscleGroup)} {ex.isNew && '[NEW]'} {ex.daysSinceTrained !== null && `(${ex.daysSinceTrained}d ago)`}
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: '6px' }}>
@@ -968,32 +946,16 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
               <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>
                 Choose alternative for <strong>{draft.exercises[swapState.exerciseIndex].title}</strong>:
               </div>
-              {swapState.alternatives.length === 0 ? (
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                  No alternatives available for {draft.exercises[swapState.exerciseIndex].primaryMuscleGroup}
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                  {swapState.alternatives.map((alt) => (
-                    <button
-                      key={alt.templateId}
-                      onClick={() => handleConfirmSwap(alt.templateId)}
-                      style={{
-                        padding: '8px',
-                        textAlign: 'left',
-                        borderRadius: '4px',
-                        border: '1px solid var(--border)',
-                        backgroundColor: 'var(--bg-secondary)',
-                        color: 'var(--text)',
-                        fontSize: '13px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {alt.name} <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>({alt.primaryMuscleGroup})</span>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <HierarchicalExerciseSelector
+                allExercises={allExercises}
+                selectedExercises={(draft as DraftWorkout).exercises.filter((_, idx) => idx !== swapState.exerciseIndex)}
+                onSelectExercise={(id) => {
+                  handleConfirmSwap(id);
+                  setSwapState({ exerciseIndex: null, alternatives: [] });
+                }}
+                initialMuscleGroup={draft.exercises[swapState.exerciseIndex].primaryMuscleGroup || undefined}
+                mode="single"
+              />
               <button
                 onClick={() => setSwapState({ exerciseIndex: null, alternatives: [] })}
                 style={{

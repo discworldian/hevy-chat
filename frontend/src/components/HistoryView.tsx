@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as api from '../api.js';
+import { formatMuscleLabel } from '../utils/muscle.js';
 import type { Workout, WorkoutAdvice } from '../types.js';
 import ErrorBanner from './ErrorBanner.jsx';
 
@@ -101,9 +102,6 @@ function getAnimalComparison(weight: number) {
   return closest;
 }
 
-function formatMuscleLabel(raw: string) {
-  return raw.split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
-}
 
 function getGroupColor(groupId: number | null, groupIdx: number) {
   if (groupId === null) return 'transparent';
