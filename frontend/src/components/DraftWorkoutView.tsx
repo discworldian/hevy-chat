@@ -213,7 +213,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
   };
 
   const handleAddExercise = (templateId: string) => {
-    if (!draft) return;
+    if (!draft || Array.isArray(draft)) return;
 
     // Prevent adding the same exercise twice
     if ((draft as DraftWorkout).exercises.some((ex) => ex.exerciseTemplateId === templateId)) {
@@ -245,7 +245,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
   };
 
   const handlePreview = async () => {
-    if (!draft) return;
+    if (!draft || Array.isArray(draft)) return;
 
     try {
       setLoading(true);
@@ -269,7 +269,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
   };
 
   const handleConfirm = async () => {
-    if (!draft || !previewToken) return;
+    if (!draft || Array.isArray(draft) || !previewToken) return;
 
     try {
       setConfirming(true);
@@ -380,8 +380,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
             </div>
           </div>
 
-          {/* Draft mode toggle - coming soon */}
-          {/*
+          {/* Draft mode toggle */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <label style={{ fontSize: '13px', fontWeight: 500, whiteSpace: 'nowrap' }}>Mode</label>
             <div className="location-toggle">
@@ -399,7 +398,6 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
               </button>
             </div>
           </div>
-          */}
 
           {/* Split day toggle - only show for single mode */}
           {settings.draftMode === 'single' && (
@@ -535,124 +533,159 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     );
   }
 
-  // Generated / Edit step
-  if (step === 'generated' && draft) {
-    const isCycleMode = Array.isArray(draft);
-    const currentDraft = isCycleMode ? draft[cycleViewIndex * 3] : draft; // Show first split of week
-    const weekDrafts = isCycleMode ? draft.slice(cycleViewIndex * 3, cycleViewIndex * 3 + 3) : [draft];
-    const currentWeek = isCycleMode ? cycleViewIndex + 1 : 1;
+  // Generated / Edit step - Cycle Mode (preview only)
+  if (step === 'generated' && draft && Array.isArray(draft)) {
+    const weekDrafts = draft.slice(cycleViewIndex * 3, cycleViewIndex * 3 + 3);
+    const currentWeek = cycleViewIndex + 1;
 
     return (
       <div className="panel">
         <h2>Draft Workout</h2>
 
-        {isCycleMode && (
-          <div style={{ marginBottom: '16px', padding: '12px', background: 'var(--bg)', borderRadius: '4px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
-              📅 8-Week Training Cycle Generated
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px', lineHeight: '1.5' }}>
-              Your complete cycle includes 24 workouts (3 per week × 8 weeks). Navigate through weeks below to preview each training block.
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-              <button
-                onClick={() => setCycleViewIndex(Math.max(0, cycleViewIndex - 1))}
-                disabled={cycleViewIndex === 0}
-                style={{
-                  padding: '6px 12px',
-                  background: cycleViewIndex === 0 ? 'var(--text-muted)' : 'var(--accent)',
-                  color: cycleViewIndex === 0 ? 'var(--text)' : 'var(--accent-contrast)',
-                  border: 'none',
-                  borderRadius: '3px',
-                  cursor: cycleViewIndex === 0 ? 'not-allowed' : 'pointer',
-                  fontSize: '12px',
-                }}
-              >
-                ← Previous Week
-              </button>
-
-              <div style={{ fontSize: '14px', fontWeight: 600, minWidth: '100px', textAlign: 'center' }}>
-                Week {currentWeek}/8
-              </div>
-
-              <button
-                onClick={() => setCycleViewIndex(Math.min(7, cycleViewIndex + 1))}
-                disabled={cycleViewIndex === 7}
-                style={{
-                  padding: '6px 12px',
-                  background: cycleViewIndex === 7 ? 'var(--text-muted)' : 'var(--accent)',
-                  color: cycleViewIndex === 7 ? 'var(--text)' : 'var(--accent-contrast)',
-                  border: 'none',
-                  borderRadius: '3px',
-                  cursor: cycleViewIndex === 7 ? 'not-allowed' : 'pointer',
-                  fontSize: '12px',
-                }}
-              >
-                Next Week →
-              </button>
-            </div>
-
-            {/* Week overview - all 3 splits */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-              {weekDrafts.map((w: any, idx: number) => {
-                const splitName = w.summary.includes('Push') ? 'Push' : w.summary.includes('Pull') ? 'Pull' : 'Legs';
-                return (
-                  <div
-                    key={idx}
-                    style={{
-                      padding: '8px',
-                      background: 'var(--bg-elevated)',
-                      borderRadius: '3px',
-                      fontSize: '11px',
-                      border: '1px solid var(--border)',
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>{splitName}</div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
-                      {w.exercises.length} exercises
-                    </div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
-                      {w.estimatedMinutes}/{w.minutesAvailable} min
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--ok)' }}>
-              ✓ Total: 24 workouts across 8 weeks
-            </div>
+        <div style={{ marginBottom: '16px', padding: '12px', background: 'var(--bg)', borderRadius: '4px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
+            📅 8-Week Training Cycle Generated
           </div>
-        )}
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px', lineHeight: '1.5' }}>
+            Your complete cycle includes 24 workouts (3 per week × 8 weeks). Navigate through weeks below to preview each training block.
+          </div>
 
-        {cycleProgress && !isCycleMode && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+            <button
+              onClick={() => setCycleViewIndex(Math.max(0, cycleViewIndex - 1))}
+              disabled={cycleViewIndex === 0}
+              style={{
+                padding: '6px 12px',
+                background: cycleViewIndex === 0 ? 'var(--text-muted)' : 'var(--accent)',
+                color: cycleViewIndex === 0 ? 'var(--text)' : 'var(--accent-contrast)',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: cycleViewIndex === 0 ? 'not-allowed' : 'pointer',
+                fontSize: '12px',
+              }}
+            >
+              ← Previous Week
+            </button>
+
+            <div style={{ fontSize: '14px', fontWeight: 600, minWidth: '100px', textAlign: 'center' }}>
+              Week {currentWeek}/8
+            </div>
+
+            <button
+              onClick={() => setCycleViewIndex(Math.min(7, cycleViewIndex + 1))}
+              disabled={cycleViewIndex === 7}
+              style={{
+                padding: '6px 12px',
+                background: cycleViewIndex === 7 ? 'var(--text-muted)' : 'var(--accent)',
+                color: cycleViewIndex === 7 ? 'var(--text)' : 'var(--accent-contrast)',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: cycleViewIndex === 7 ? 'not-allowed' : 'pointer',
+                fontSize: '12px',
+              }}
+            >
+              Next Week →
+            </button>
+          </div>
+
+          {/* Week overview - all 3 splits */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '12px' }}>
+            {weekDrafts.map((w: DraftWorkout, idx: number) => {
+              const splitName = w.summary.includes('Push') ? 'Push' : w.summary.includes('Pull') ? 'Pull' : 'Legs';
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    padding: '8px',
+                    background: 'var(--bg-elevated)',
+                    borderRadius: '3px',
+                    fontSize: '11px',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: '4px' }}>{splitName}</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
+                    {w.exercises.length} exercises
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
+                    {w.estimatedMinutes}/{w.minutesAvailable} min
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ fontSize: '11px', color: 'var(--ok)' }}>
+            ✓ Total: 24 workouts across 8 weeks
+          </div>
+        </div>
+
+        {error && <ErrorBanner message={error} />}
+
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={handleReset}
+            style={{
+              flex: 1,
+              padding: '12px 16px',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              color: 'var(--text)',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: 500,
+            }}
+          >
+            ← Back
+          </button>
+          <button
+            onClick={handlePreview}
+            disabled={loading}
+            style={{
+              flex: 1,
+              padding: '12px 16px',
+              backgroundColor: 'var(--ok)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              fontWeight: 500,
+              opacity: loading ? 0.6 : 1,
+            }}
+          >
+            {loading ? 'Previewing...' : 'Preview & Push Cycle'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Generated / Edit step - Single Session Mode
+  if (step === 'generated' && draft && !Array.isArray(draft)) {
+    const currentDraft = draft;
+
+    return (
+      <div className="panel">
+        <h2>Draft Workout</h2>
+        {cycleProgress && (
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px', padding: '8px', background: 'var(--bg)', borderRadius: '3px' }}>
-            {currentDraft?.cycleInfo && currentDraft.cycleInfo.isFixed ? (
+            {currentDraft.cycleInfo && currentDraft.cycleInfo.isFixed ? (
               <>
                 <strong>📌 Cycle Week {currentDraft.cycleInfo.weekNumber}/8</strong> — Using fixed compounds from your 8-week cycle
               </>
             ) : (
               <>
-                <strong>📌 Cycle Week {currentDraft?.cycleInfo?.weekNumber || cycleProgress.weekNumber}/8</strong> — Accessories rotating
+                <strong>📌 Cycle Week {currentDraft.cycleInfo?.weekNumber || cycleProgress.weekNumber}/8</strong> — Accessories rotating
               </>
             )}
           </div>
         )}
         {error && <ErrorBanner message={error} />}
 
-        {isCycleMode ? (
-          <div style={{ marginTop: '16px', padding: '12px', background: 'var(--bg)', borderRadius: '4px', textAlign: 'center' }}>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-              To save this cycle, confirm all 24 workouts together below.
-            </p>
-          </div>
-        ) : null}
-
         <div style={{ marginBottom: '20px', padding: '12px', backgroundColor: 'var(--bg)', borderRadius: '6px' }}>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{draft.summary}</div>
+          <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{currentDraft.summary}</div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
-            {(draft as DraftWorkout).exercises.length} exercises • {draft.estimatedMinutes} min estimated
+            {currentDraft.exercises.length} exercises • {currentDraft.estimatedMinutes} min estimated
           </div>
         </div>
 
