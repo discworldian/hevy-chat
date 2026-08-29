@@ -579,6 +579,7 @@ export default function HistoryView({ location }: Props) {
                                   : null;
 
                                 const maxReps = Math.max(...nonWarmupSets.map((s: any) => s.reps || 0), 1);
+                                const isCardioExerciseObj = { primaryMuscleGroup: muscleGroupMap[ex.exercise_template_id] };
 
                                 return (
                                   <div
@@ -601,7 +602,7 @@ export default function HistoryView({ location }: Props) {
                                         </div>
                                       )}
                                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                                        {isCardioExercise({ primaryMuscleGroup: muscleGroupMap[ex.exercise_template_id] } as any) ? (
+                                        {isCardioExercise(isCardioExerciseObj as any) ? (
                                           <>
                                             {nonWarmupSets.length} session{nonWarmupSets.length !== 1 ? 's' : ''} •{' '}
                                             {nonWarmupSets
@@ -633,7 +634,7 @@ export default function HistoryView({ location }: Props) {
                                         )}
                                       </div>
                                     </div>
-                                    {!isCardioExercise({ primaryMuscleGroup: muscleGroupMap[ex.exercise_template_id] } as any) && (
+                                    {!isCardioExercise(isCardioExerciseObj as any) && (
                                       <div style={{ display: 'flex', gap: '3px', alignItems: 'flex-end', flexShrink: 0, minHeight: '36px' }}>
                                         {nonWarmupSets.map((set: any, idx: any) => {
                                           const heightPercent = set.reps ? (set.reps / maxReps) * 100 : 50;

@@ -21,17 +21,9 @@ interface Props {
 
 // Region labels overlay using curved text paths
 function RegionLabelsOverlay() {
-  const radius = 42;
+  const radius = 54;
   const centerX = 50;
   const centerY = 50;
-
-  // Calculate arc paths for curved text
-  const createArcPath = (startAngle: number, endAngle: number) => {
-    const start = polarToCartesian(centerX, centerY, radius, endAngle);
-    const end = polarToCartesian(centerX, centerY, radius, startAngle);
-    const largeArc = endAngle - startAngle <= 180 ? '0' : '1';
-    return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 0 ${end.x} ${end.y}`;
-  };
 
   const polarToCartesian = (cx: number, cy: number, r: number, angle: number) => {
     const rad = (angle * Math.PI) / 180;
@@ -39,6 +31,13 @@ function RegionLabelsOverlay() {
       x: cx + r * Math.cos(rad),
       y: cy + r * Math.sin(rad),
     };
+  };
+
+  const createArcPath = (startAngle: number, endAngle: number) => {
+    const start = polarToCartesian(centerX, centerY, radius, endAngle);
+    const end = polarToCartesian(centerX, centerY, radius, startAngle);
+    const largeArc = endAngle - startAngle <= 180 ? '0' : '1';
+    return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 0 ${end.x} ${end.y}`;
   };
 
   return (
@@ -55,51 +54,27 @@ function RegionLabelsOverlay() {
       preserveAspectRatio="xMidYMid meet"
     >
       <defs>
-        {/* Arc path for UPPER (top, 60-120°) */}
-        <path id="arcUpper" d={createArcPath(60, 120)} fill="none" />
-        {/* Arc path for LOWER (bottom, 240-300°) */}
-        <path id="arcLower" d={createArcPath(240, 300)} fill="none" />
-        {/* Arc path for CORE (right, 150-210°) */}
-        <path id="arcCore" d={createArcPath(150, 210)} fill="none" />
+        {/* UPPER: 0-120° region */}
+        <path id="arcUpper" d={createArcPath(20, 100)} fill="none" />
+        {/* LOWER: 144-288° region */}
+        <path id="arcLower" d={createArcPath(170, 270)} fill="none" />
+        {/* CORE: 312-336° region only */}
+        <path id="arcCore" d={createArcPath(308, 340)} fill="none" />
       </defs>
 
-      {/* UPPER label */}
-      <text
-        fontSize="11"
-        fontWeight="600"
-        fill="var(--accent)"
-        opacity="0.8"
-        letterSpacing="2"
-        style={{ pointerEvents: 'none' }}
-      >
+      <text fontSize="6" fontWeight="600" fill="var(--accent)" opacity="0.8" style={{ pointerEvents: 'none' }}>
         <textPath href="#arcUpper" startOffset="50%" textAnchor="middle">
-          UPPER BODY
+          UPPER
         </textPath>
       </text>
 
-      {/* LOWER label */}
-      <text
-        fontSize="11"
-        fontWeight="600"
-        fill="var(--ok)"
-        opacity="0.8"
-        letterSpacing="2"
-        style={{ pointerEvents: 'none' }}
-      >
+      <text fontSize="6" fontWeight="600" fill="var(--ok)" opacity="0.8" style={{ pointerEvents: 'none' }}>
         <textPath href="#arcLower" startOffset="50%" textAnchor="middle">
-          LOWER BODY
+          LOWER
         </textPath>
       </text>
 
-      {/* CORE label */}
-      <text
-        fontSize="11"
-        fontWeight="600"
-        fill="var(--text-muted)"
-        opacity="0.8"
-        letterSpacing="2"
-        style={{ pointerEvents: 'none' }}
-      >
+      <text fontSize="6" fontWeight="600" fill="var(--text-muted)" opacity="0.8" style={{ pointerEvents: 'none' }}>
         <textPath href="#arcCore" startOffset="50%" textAnchor="middle">
           CORE
         </textPath>
