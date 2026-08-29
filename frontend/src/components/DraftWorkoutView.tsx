@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import * as api from '../api.js';
 import type { DraftWorkout, DraftWorkoutExercise, ExerciseTemplate } from '../types.js';
 import ErrorBanner from './ErrorBanner.jsx';
+import CycleSetupView from './CycleSetupView.jsx';
 
 interface Props {
   location: 'home' | 'gym';
@@ -22,6 +23,7 @@ interface DraftSettings {
   includeCardio: boolean;
   includeAbdominals: boolean;
   includeWarmupCooldown: boolean;
+  draftMode: 'single' | 'cycle';
 }
 
 export default function DraftWorkoutView({ location: globalLocation }: Props) {
@@ -33,8 +35,9 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     includeCardio: false,
     includeAbdominals: false,
     includeWarmupCooldown: false,
+    draftMode: 'single',
   });
-  const [draft, setDraft] = useState<DraftWorkout | null>(null);
+  const [draft, setDraft] = useState<DraftWorkout | DraftWorkout[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<UIStep>('input');
@@ -45,6 +48,9 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [confirmedRoutine, setConfirmedRoutine] = useState<{ id: string; title: string } | null>(null);
   const [swapState, setSwapState] = useState<SwapState>({ exerciseIndex: null, alternatives: [] });
+  const [activeCycle, setActiveCycle] = useState<any | null>(undefined); // undefined = loading, null = no cycle, object = active cycle
+  const [cycleProgress, setCycleProgress] = useState<any | null>(null);
+  const [cycleViewIndex, setCycleViewIndex] = useState(0); // Which week to view when displaying full cycle
 
   // Load available exercises on mount
   useEffect(() => {
@@ -60,22 +66,56 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     loadExercises();
   }, []);
 
+  // Check for active cycle on mount
+  useEffect(() => {
+    const checkCycle = async () => {
+      try {
+        const result = (await api.getCurrentCycle()) as { cycle: any };
+        setActiveCycle(result.cycle);
+        if (result.cycle) {
+          const progress = (await api.getCycleProgress()) as any;
+          setCycleProgress(progress);
+        }
+      } catch (err: any) {
+        console.error('Failed to check cycle:', err);
+        setActiveCycle(null);
+      }
+    };
+    checkCycle();
+  }, []);
+
   const handleGenerate = async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = (await api.generateDraftWorkout(settings.minutesAvailable, settings.location, settings.splitDay, settings.includeCardio, settings.includeAbdominals, settings.includeWarmupCooldown)) as
-        | DraftWorkout
-        | { status: 'time_too_short'; minMinutesNeeded: number };
+      if (settings.draftMode === 'single') {
+        const result = (await api.generateDraftWorkout(settings.minutesAvailable, settings.location, settings.splitDay, settings.includeCardio, settings.includeAbdominals, settings.includeWarmupCooldown)) as
+          | DraftWorkout
+          | { status: 'time_too_short'; minMinutesNeeded: number };
 
-      if ('status' in result && result.status === 'time_too_short') {
-        setError(`Not enough time. Minimum ${result.minMinutesNeeded} minutes needed.`);
-        setStep('input');
+        if ('status' in result && result.status === 'time_too_short') {
+          setError(`Not enough time. Minimum ${result.minMinutesNeeded} minutes needed.`);
+          setStep('input');
+        } else {
+          setDraft(result as DraftWorkout);
+          setRoutineTitle(`Workout — ${new Date().toLocaleDateString()}`);
+          setStep('generated');
+          setError(null);
+        }
       } else {
-        setDraft(result as DraftWorkout);
-        setRoutineTitle(`Workout — ${new Date().toLocaleDateString()}`);
-        setStep('generated');
-        setError(null);
+        // Full cycle mode - generate all 24 workouts (3 per week × 8 weeks)
+        const result = (await api.generateDraftCycle(settings.minutesAvailable, settings.location, settings.includeCardio, settings.includeAbdominals, settings.includeWarmupCooldown)) as any;
+
+        if ('status' in result && result.status === 'time_too_short') {
+          setError(`Not enough time. Minimum ${result.minMinutesNeeded} minutes needed.`);
+          setStep('input');
+        } else if (result.workouts) {
+          setDraft(result.workouts);
+          setRoutineTitle(`8-Week Cycle — Starting ${new Date().toLocaleDateString()}`);
+          setCycleViewIndex(0);
+          setStep('generated');
+          setError(null);
+        }
       }
     } catch (err: any) {
       setError(err.message);
@@ -85,10 +125,22 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     }
   };
 
+  const updateCurrentWorkout = (updated: DraftWorkout) => {
+    if (Array.isArray(draft)) {
+      const newDrafts = [...draft];
+      newDrafts[cycleViewIndex * 3] = updated;
+      setDraft(newDrafts);
+    } else {
+      setDraft(updated);
+    }
+  };
+
   const handleRemoveExercise = (idx: number) => {
-    if (!draft) return;
-    const updated = draft.exercises.filter((_, i) => i !== idx);
-    setDraft({ ...draft, exercises: updated });
+    const isCycleMode = Array.isArray(draft);
+    const currentDraft = isCycleMode ? draft[cycleViewIndex * 3] : draft;
+    if (!currentDraft) return;
+    const updated = currentDraft.exercises.filter((_, i) => i !== idx);
+    updateCurrentWorkout({ ...currentDraft, exercises: updated });
     // Close swap picker if it was for this exercise
     if (swapState.exerciseIndex === idx) {
       setSwapState({ exerciseIndex: null, alternatives: [] });
@@ -96,10 +148,11 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
   };
 
   const findAlternatives = (exerciseIndex: number): ExerciseTemplate[] => {
-    if (!draft || exerciseIndex >= draft.exercises.length) return [];
+    if (!draft || Array.isArray(draft)) return [];
+    if (exerciseIndex >= (draft as DraftWorkout).exercises.length) return [];
 
     const current = draft.exercises[exerciseIndex];
-    const selectedIds = new Set(draft.exercises.map((ex) => ex.exerciseTemplateId));
+    const selectedIds = new Set((draft as DraftWorkout).exercises.map((ex: any) => ex.exerciseTemplateId));
 
     // Find exercises that target the same primary muscle group
     const alternatives = allExercises.filter((ex) => {
@@ -124,7 +177,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
   };
 
   const handleConfirmSwap = (newTemplateId: string) => {
-    if (!draft || swapState.exerciseIndex === null) return;
+    if (!draft || Array.isArray(draft) || swapState.exerciseIndex === null) return;
 
     const newTemplate = allExercises.find((ex) => ex.templateId === newTemplateId);
     if (!newTemplate) return;
@@ -153,7 +206,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     value: any,
   ) => {
     if (!draft) return;
-    const updated = draft.exercises.map((ex, i) =>
+    const updated = (draft as DraftWorkout).exercises.map((ex, i) =>
       i === idx ? { ...ex, [key]: value } : ex,
     );
     setDraft({ ...draft, exercises: updated });
@@ -163,7 +216,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     if (!draft) return;
 
     // Prevent adding the same exercise twice
-    if (draft.exercises.some((ex) => ex.exerciseTemplateId === templateId)) {
+    if ((draft as DraftWorkout).exercises.some((ex) => ex.exerciseTemplateId === templateId)) {
       setError('This exercise is already in your draft');
       return;
     }
@@ -248,11 +301,33 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     setStep('input');
   };
 
+  // Show loading while checking for cycle
+  if (activeCycle === undefined) {
+    return (
+      <div className="panel">
+        <h2>Draft Workout</h2>
+        <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
+          Loading...
+        </div>
+      </div>
+    );
+  }
+
+  // Show cycle setup if no active cycle
+  if (!activeCycle) {
+    return <CycleSetupView onCycleStarted={() => setActiveCycle(true)} />;
+  }
+
   // Input step
   if (step === 'input') {
     return (
       <div className="panel">
         <h2>Draft Workout</h2>
+        {cycleProgress && (
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+            Week {cycleProgress.weekNumber}/8 • {Math.round(cycleProgress.weekPercentage)}% complete • {cycleProgress.daysRemaining} days remaining
+          </div>
+        )}
         {error && <ErrorBanner message={error} />}
 
         {/* Compact single-row layout */}
@@ -305,30 +380,53 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
             </div>
           </div>
 
-          {/* Split day toggle */}
+          {/* Draft mode toggle - coming soon */}
+          {/*
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label style={{ fontSize: '13px', fontWeight: 500, whiteSpace: 'nowrap' }}>Split</label>
+            <label style={{ fontSize: '13px', fontWeight: 500, whiteSpace: 'nowrap' }}>Mode</label>
             <div className="location-toggle">
               <button
-                className={settings.splitDay === 'push' ? 'active' : ''}
-                onClick={() => setSettings({ ...settings, splitDay: 'push' })}
+                className={settings.draftMode === 'single' ? 'active' : ''}
+                onClick={() => setSettings({ ...settings, draftMode: 'single' })}
               >
-                Push
+                Single
               </button>
               <button
-                className={settings.splitDay === 'pull' ? 'active' : ''}
-                onClick={() => setSettings({ ...settings, splitDay: 'pull' })}
+                className={settings.draftMode === 'cycle' ? 'active' : ''}
+                onClick={() => setSettings({ ...settings, draftMode: 'cycle' })}
               >
-                Pull
-              </button>
-              <button
-                className={settings.splitDay === 'legs' ? 'active' : ''}
-                onClick={() => setSettings({ ...settings, splitDay: 'legs' })}
-              >
-                Legs
+                Full Cycle
               </button>
             </div>
           </div>
+          */}
+
+          {/* Split day toggle - only show for single mode */}
+          {settings.draftMode === 'single' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <label style={{ fontSize: '13px', fontWeight: 500, whiteSpace: 'nowrap' }}>Split</label>
+              <div className="location-toggle">
+                <button
+                  className={settings.splitDay === 'push' ? 'active' : ''}
+                  onClick={() => setSettings({ ...settings, splitDay: 'push' })}
+                >
+                  Push
+                </button>
+                <button
+                  className={settings.splitDay === 'pull' ? 'active' : ''}
+                  onClick={() => setSettings({ ...settings, splitDay: 'pull' })}
+                >
+                  Pull
+                </button>
+                <button
+                  className={settings.splitDay === 'legs' ? 'active' : ''}
+                  onClick={() => setSettings({ ...settings, splitDay: 'legs' })}
+                >
+                  Legs
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Options checkboxes */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -439,15 +537,122 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
 
   // Generated / Edit step
   if (step === 'generated' && draft) {
+    const isCycleMode = Array.isArray(draft);
+    const currentDraft = isCycleMode ? draft[cycleViewIndex * 3] : draft; // Show first split of week
+    const weekDrafts = isCycleMode ? draft.slice(cycleViewIndex * 3, cycleViewIndex * 3 + 3) : [draft];
+    const currentWeek = isCycleMode ? cycleViewIndex + 1 : 1;
+
     return (
       <div className="panel">
         <h2>Draft Workout</h2>
+
+        {isCycleMode && (
+          <div style={{ marginBottom: '16px', padding: '12px', background: 'var(--bg)', borderRadius: '4px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
+              📅 8-Week Training Cycle Generated
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px', lineHeight: '1.5' }}>
+              Your complete cycle includes 24 workouts (3 per week × 8 weeks). Navigate through weeks below to preview each training block.
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <button
+                onClick={() => setCycleViewIndex(Math.max(0, cycleViewIndex - 1))}
+                disabled={cycleViewIndex === 0}
+                style={{
+                  padding: '6px 12px',
+                  background: cycleViewIndex === 0 ? 'var(--text-muted)' : 'var(--accent)',
+                  color: cycleViewIndex === 0 ? 'var(--text)' : 'var(--accent-contrast)',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: cycleViewIndex === 0 ? 'not-allowed' : 'pointer',
+                  fontSize: '12px',
+                }}
+              >
+                ← Previous Week
+              </button>
+
+              <div style={{ fontSize: '14px', fontWeight: 600, minWidth: '100px', textAlign: 'center' }}>
+                Week {currentWeek}/8
+              </div>
+
+              <button
+                onClick={() => setCycleViewIndex(Math.min(7, cycleViewIndex + 1))}
+                disabled={cycleViewIndex === 7}
+                style={{
+                  padding: '6px 12px',
+                  background: cycleViewIndex === 7 ? 'var(--text-muted)' : 'var(--accent)',
+                  color: cycleViewIndex === 7 ? 'var(--text)' : 'var(--accent-contrast)',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: cycleViewIndex === 7 ? 'not-allowed' : 'pointer',
+                  fontSize: '12px',
+                }}
+              >
+                Next Week →
+              </button>
+            </div>
+
+            {/* Week overview - all 3 splits */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              {weekDrafts.map((w: any, idx: number) => {
+                const splitName = w.summary.includes('Push') ? 'Push' : w.summary.includes('Pull') ? 'Pull' : 'Legs';
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '8px',
+                      background: 'var(--bg-elevated)',
+                      borderRadius: '3px',
+                      fontSize: '11px',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>{splitName}</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
+                      {w.exercises.length} exercises
+                    </div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
+                      {w.estimatedMinutes}/{w.minutesAvailable} min
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--ok)' }}>
+              ✓ Total: 24 workouts across 8 weeks
+            </div>
+          </div>
+        )}
+
+        {cycleProgress && !isCycleMode && (
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px', padding: '8px', background: 'var(--bg)', borderRadius: '3px' }}>
+            {currentDraft?.cycleInfo && currentDraft.cycleInfo.isFixed ? (
+              <>
+                <strong>📌 Cycle Week {currentDraft.cycleInfo.weekNumber}/8</strong> — Using fixed compounds from your 8-week cycle
+              </>
+            ) : (
+              <>
+                <strong>📌 Cycle Week {currentDraft?.cycleInfo?.weekNumber || cycleProgress.weekNumber}/8</strong> — Accessories rotating
+              </>
+            )}
+          </div>
+        )}
         {error && <ErrorBanner message={error} />}
+
+        {isCycleMode ? (
+          <div style={{ marginTop: '16px', padding: '12px', background: 'var(--bg)', borderRadius: '4px', textAlign: 'center' }}>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+              To save this cycle, confirm all 24 workouts together below.
+            </p>
+          </div>
+        ) : null}
 
         <div style={{ marginBottom: '20px', padding: '12px', backgroundColor: 'var(--bg)', borderRadius: '6px' }}>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{draft.summary}</div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
-            {draft.exercises.length} exercises • {draft.estimatedMinutes} min estimated
+            {(draft as DraftWorkout).exercises.length} exercises • {draft.estimatedMinutes} min estimated
           </div>
         </div>
 
@@ -456,13 +661,13 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
             EXERCISES
           </div>
 
-          {draft.exercises.length === 0 ? (
+          {(draft as DraftWorkout).exercises.length === 0 ? (
             <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
               No exercises selected. Add one below.
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
-              {draft.exercises.map((ex, idx) => (
+              {(draft as DraftWorkout).exercises.map((ex, idx) => (
                 <div
                   key={idx}
                   style={{
@@ -513,15 +718,24 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', fontSize: '13px' }}>
                     <div>
-                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                        Sets
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="5"
-                        value={ex.sets}
-                        onChange={(e) => handleUpdateExercise(idx, 'sets', parseInt(e.target.value) || 1)}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Sets</label>
+                        {ex.useDropSets && (
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              padding: '2px 6px',
+                              backgroundColor: 'var(--accent)',
+                              color: 'white',
+                              borderRadius: '3px',
+                            }}
+                          >
+                            DS
+                          </span>
+                        )}
+                      </div>
+                      <div
                         style={{
                           width: '100%',
                           padding: '6px',
@@ -531,7 +745,9 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
                           color: 'var(--text)',
                           fontSize: '13px',
                         }}
-                      />
+                      >
+                        {ex.useDropSets ? '1 working + 2 drop' : ex.sets + ' sets'}
+                      </div>
                     </div>
 
                     <div>
@@ -598,6 +814,70 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
                         />
                       )}
                     </div>
+                  </div>
+
+                  {/* Warm-up set section */}
+                  <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: '12px', marginTop: '12px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px', marginBottom: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={ex.includeWarmupSet || false}
+                        onChange={(e) => handleUpdateExercise(idx, 'includeWarmupSet', e.target.checked)}
+                        style={{
+                          width: '14px',
+                          height: '14px',
+                          cursor: 'pointer',
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', fontWeight: 500 }}>Include warm-up set</span>
+                    </label>
+
+                    {ex.includeWarmupSet && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '13px' }}>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                            Warm-up Weight (kg)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={ex.warmupWeightKg || ''}
+                            onChange={(e) => handleUpdateExercise(idx, 'warmupWeightKg', parseFloat(e.target.value) || null)}
+                            style={{
+                              width: '100%',
+                              padding: '6px',
+                              borderRadius: '4px',
+                              border: '1px solid var(--border)',
+                              backgroundColor: 'var(--bg-secondary)',
+                              color: 'var(--text)',
+                              fontSize: '13px',
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                            Warm-up Reps
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="50"
+                            value={ex.warmupReps || 10}
+                            onChange={(e) => handleUpdateExercise(idx, 'warmupReps', parseInt(e.target.value) || 10)}
+                            style={{
+                              width: '100%',
+                              padding: '6px',
+                              borderRadius: '4px',
+                              border: '1px solid var(--border)',
+                              backgroundColor: 'var(--bg-secondary)',
+                              color: 'var(--text)',
+                              fontSize: '13px',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -673,7 +953,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
             >
               <option value="">+ Add exercise</option>
               {allExercises.map((ex) => {
-                const alreadySelected = draft.exercises.some((e) => e.exerciseTemplateId === ex.templateId);
+                const alreadySelected = (draft as DraftWorkout).exercises.some((e) => e.exerciseTemplateId === ex.templateId);
                 return (
                   <option key={ex.templateId} value={ex.templateId} disabled={alreadySelected}>
                     {ex.name} ({ex.primaryMuscleGroup})
@@ -722,15 +1002,15 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
           </button>
           <button
             onClick={handlePreview}
-            disabled={loading || draft.exercises.length === 0}
+            disabled={loading || (draft as DraftWorkout).exercises.length === 0}
             style={{
               padding: '10px',
               borderRadius: '6px',
               border: 'none',
-              backgroundColor: draft.exercises.length === 0 ? 'var(--border)' : 'var(--accent)',
+              backgroundColor: (draft as DraftWorkout).exercises.length === 0 ? 'var(--border)' : 'var(--accent)',
               color: 'white',
               fontWeight: 500,
-              cursor: draft.exercises.length === 0 ? 'not-allowed' : 'pointer',
+              cursor: (draft as DraftWorkout).exercises.length === 0 ? 'not-allowed' : 'pointer',
               opacity: loading ? 0.6 : 1,
             }}
           >

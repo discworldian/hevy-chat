@@ -91,6 +91,10 @@ export interface DraftWorkoutExercise {
   targetReps: number;
   suggestedWeightKg: number | null;
   suggestion?: Suggestion;
+  useDropSets?: boolean;
+  includeWarmupSet?: boolean;
+  warmupWeightKg?: number | null;
+  warmupReps?: number;
 }
 
 export interface DraftWorkout {
@@ -99,4 +103,9 @@ export interface DraftWorkout {
   estimatedMinutes: number;
   summary: string;
   exercises: DraftWorkoutExercise[];
+  cycleInfo?: {
+    cycleId: string;
+    weekNumber: number;
+    isFixed: boolean;
+  };
 }

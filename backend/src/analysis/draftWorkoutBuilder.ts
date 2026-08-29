@@ -4,11 +4,12 @@ import type { Suggestion } from '../analysis/types.js';
 import * as cache from '../cache.js';
 import { analyzeExercise } from './exerciseAnalysis.js';
 import { computeMuscleRecency, rankMuscleGroups } from './muscleGroups.js';
-import { estimateExerciseSeconds, EXERCISE_SETUP_OVERHEAD_SECONDS, SECONDS_PER_SET } from './exerciseTimeEstimate.js';
+import { estimateExerciseSeconds, estimateDropSetExerciseSeconds, EXERCISE_SETUP_OVERHEAD_SECONDS, SECONDS_PER_SET } from './exerciseTimeEstimate.js';
 import { canExerciseBePerformed } from '../equipment/exerciseEquipmentMap.js';
-import { isCompoundExercise } from './incrementTable.js';
+import { isCompoundExercise, roundToNearestIncrement, getIncrementForExercise } from './incrementTable.js';
 import type { SplitDay } from './splitDefinitions.js';
 import { getMuscleGroupsForSplit, getOptionalMuscleGroups } from './splitDefinitions.js';
+import type { TrainingCycle } from './cycleManager.js';
 
 const MUSCLE_GROUP_REGION: Record<string, 'upper' | 'lower' | 'core'> = {
   quadriceps: 'lower', glutes: 'lower', hamstrings: 'lower', calves: 'lower', lower_back: 'lower',
@@ -29,6 +30,10 @@ export interface DraftWorkoutExercise {
   targetReps: number;
   suggestedWeightKg: number | null;
   suggestion?: Suggestion;
+  useDropSets?: boolean;
+  includeWarmupSet?: boolean;
+  warmupWeightKg?: number | null;
+  warmupReps?: number;
 }
 
 export interface DraftWorkout {
@@ -37,6 +42,11 @@ export interface DraftWorkout {
   estimatedMinutes: number;
   summary: string;
   exercises: DraftWorkoutExercise[];
+  cycleInfo?: {
+    cycleId: string;
+    weekNumber: number;
+    isFixed: boolean; // true if using cycle's fixed compounds
+  };
 }
 
 type DraftWorkoutError = { status: 'time_too_short'; minMinutesNeeded: number };
@@ -48,6 +58,7 @@ export async function buildDraftWorkout(
   includeCardio: boolean = false,
   includeAbdominals: boolean = false,
   includeWarmupCooldown: boolean = false,
+  cycle?: TrainingCycle | null,
 ): Promise<DraftWorkout | DraftWorkoutError> {
   const workoutsCache = await cache.readWorkouts();
   const templatesCache = await cache.readTemplates();
@@ -121,6 +132,8 @@ export async function buildDraftWorkout(
     hasHistory: boolean,
     daysSinceTrained: number | null,
   ): Promise<DraftWorkoutExercise> {
+    const isCompound = isCompoundExercise(template);
+
     if (hasHistory) {
       // Get real progression suggestion
       const analysis = await analyzeExercise(
@@ -142,6 +155,14 @@ export async function buildDraftWorkout(
         plateauWarning: false,
       };
 
+      // Calculate warm-up weight (50% of working weight) - only for weighted exercises
+      const hasWeight = !!(suggestion.nextWeightKg && suggestion.nextWeightKg > 0);
+      let warmupWeightKg: number | null = null;
+      if (hasWeight) {
+        const increment = getIncrementForExercise(template, isCompound);
+        warmupWeightKg = roundToNearestIncrement(suggestion.nextWeightKg * 0.5, increment);
+      }
+
       return {
         exerciseTemplateId: template.id,
         title: template.title,
@@ -154,6 +175,9 @@ export async function buildDraftWorkout(
         targetReps: suggestion.nextTargetReps,
         suggestedWeightKg: suggestion.nextWeightKg,
         suggestion,
+        includeWarmupSet: isCompound && hasWeight,
+        warmupWeightKg: isCompound && hasWeight ? warmupWeightKg : null,
+        warmupReps: isCompound && hasWeight ? 10 : undefined,
       };
     } else {
       // New exercise, no history
@@ -168,6 +192,9 @@ export async function buildDraftWorkout(
         targetRepsHigh: 12,
         targetReps: 10,
         suggestedWeightKg: null,
+        includeWarmupSet: false,
+        warmupWeightKg: null,
+        warmupReps: undefined,
       };
     }
   }
@@ -177,7 +204,98 @@ export async function buildDraftWorkout(
     return workouts.some((w) => w.exercises.some((e) => e.exercise_template_id === templateId));
   }
 
-  // Phase 1a: Select 3-4 compounds first, prioritizing split-day muscles
+  // Helper to categorize exercise by movement type
+  function getMovementType(title: string): string {
+    const lower = title.toLowerCase();
+    if (/press|dip|push/i.test(lower)) return 'press';
+    if (/row|pull|pulldown|lat/i.test(lower)) return 'row';
+    if (/fly|pec deck|crossover/i.test(lower)) return 'fly';
+    if (/curl|bicep/i.test(lower)) return 'curl';
+    if (/extension|tricep|overhead/i.test(lower)) return 'extension';
+    if (/raise|lateral|front/i.test(lower)) return 'raise';
+    return 'other';
+  }
+
+  // Helper to check if exercise is too similar to already selected ones
+  function isTooSimilar(template: ExerciseTemplate): boolean {
+    const newMovementType = getMovementType(template.title);
+    const newBaseTitle = template.title.replace(/\s*\([^)]*\)/g, '').toLowerCase();
+    let pressingMovements = 0;
+
+    for (const selected of selectedExercises) {
+      const selectedTemplate = templates.find((t) => t.id === selected.exerciseTemplateId);
+      if (!selectedTemplate) continue;
+
+      const selectedMovementType = getMovementType(selectedTemplate.title);
+      const selectedBaseTitle = selectedTemplate.title.replace(/\s*\([^)]*\)/g, '').toLowerCase();
+
+      // Same exact movement (e.g., "Bench Press" variants)
+      if (newBaseTitle === selectedBaseTitle) {
+        return true;
+      }
+
+      // Too many pressing movements in one session (max 2 for compound focus)
+      if (selectedMovementType === 'press') {
+        pressingMovements++;
+      }
+      if (newMovementType === 'press' && pressingMovements >= 2) {
+        return true;
+      }
+
+      // Same primary muscle AND same movement type (e.g., two different presses)
+      if (
+        template.primary_muscle_group === selectedTemplate.primary_muscle_group &&
+        newMovementType === selectedMovementType &&
+        newMovementType !== 'other'
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // Phase 0: If cycle is active, use its fixed compounds for this split day
+  if (cycle && cycle.compoundExercises && splitDay in cycle.compoundExercises) {
+    const cycleCompoundIds = cycle.compoundExercises[splitDay as keyof typeof cycle.compoundExercises];
+    for (const compoundId of cycleCompoundIds) {
+      if (usedTemplateIds.has(compoundId) || compoundsSelected >= MAX_COMPOUNDS) {
+        continue;
+      }
+
+      const template = templates.find((t) => t.id === compoundId);
+      if (!template) continue;
+
+      // Estimate with warmup if compound
+      const estSeconds = isCompoundExercise(template)
+        ? estimateExerciseSeconds(template, 3)
+        : estimateExerciseSeconds(template, 2);
+
+      if (usedSeconds + estSeconds <= availableSeconds) {
+        const daysSinceTrained = template.primary_muscle_group ? recency[template.primary_muscle_group]?.daysSinceTrained ?? null : null;
+
+        const draftExercise = await buildDraftExercise(
+          template,
+          3,
+          hasExerciseHistory(template.id),
+          daysSinceTrained,
+        );
+
+        selectedExercises.push(draftExercise);
+        usedSeconds += estSeconds;
+        usedTemplateIds.add(template.id);
+
+        // Mark all primary and secondary muscles as addressed
+        if (template.primary_muscle_group) {
+          addressedMuscles.add(template.primary_muscle_group);
+        }
+
+        compoundsSelected++;
+      }
+    }
+  }
+
+  // Phase 1a: Select 3-4 compounds first, prioritizing split-day muscles (if not using cycle)
   for (const muscleGroup of rankedMuscles) {
     if (compoundsSelected >= MAX_COMPOUNDS || !splitMuscles.has(muscleGroup)) {
       continue; // Skip accessory muscles in compound phase
@@ -192,9 +310,13 @@ export async function buildDraftWorkout(
       continue;
     }
 
-    // Prioritize compounds over accessories in Phase 1a
-    const compoundCandidates = availableCandidates.filter((t) => isCompoundExercise(t));
-    const candidatePool = compoundCandidates.length > 0 ? compoundCandidates : availableCandidates;
+    // Prioritize compounds over accessories in Phase 1a, skip similar exercises
+    const compoundCandidates = availableCandidates.filter((t) => isCompoundExercise(t) && !isTooSimilar(t));
+    const candidatePool = compoundCandidates.length > 0 ? compoundCandidates : availableCandidates.filter((t) => !isTooSimilar(t));
+
+    if (candidatePool.length === 0) {
+      continue; // No non-similar candidates
+    }
 
     // Prefer previously-logged exercises
     let selectedTemplate = candidatePool.find((t) => hasExerciseHistory(t.id));
@@ -237,7 +359,7 @@ export async function buildDraftWorkout(
     }
 
     const candidates = await findCandidates(muscleGroup);
-    const availableCandidates = candidates.filter((t) => !usedTemplateIds.has(t.id));
+    const availableCandidates = candidates.filter((t) => !usedTemplateIds.has(t.id) && !isTooSimilar(t));
     if (availableCandidates.length === 0) {
       continue;
     }
@@ -297,7 +419,7 @@ export async function buildDraftWorkout(
       }
 
       const candidates = await findCandidates(muscleGroup);
-      const availableCandidates = candidates.filter((t) => !usedTemplateIds.has(t.id));
+      const availableCandidates = candidates.filter((t) => !usedTemplateIds.has(t.id) && !isTooSimilar(t));
       if (availableCandidates.length === 0) {
         continue;
       }
@@ -341,7 +463,7 @@ export async function buildDraftWorkout(
     for (const muscleGroup of rankedMuscles) {
       // This time, we DON'T skip addressed muscles - we want secondary exercises
       const candidates = await findCandidates(muscleGroup);
-      const availableCandidates = candidates.filter((t) => !usedTemplateIds.has(t.id));
+      const availableCandidates = candidates.filter((t) => !usedTemplateIds.has(t.id) && !isTooSimilar(t));
       if (availableCandidates.length === 0) {
         continue;
       }
@@ -406,6 +528,42 @@ export async function buildDraftWorkout(
     }
 
     usedSeconds += bonusSecsUsed;
+  }
+
+  // Phase 4: Convert last 1-2 accessories to drop sets if over time budget
+  if (usedSeconds > availableSeconds) {
+    // Find accessories (non-compounds, excluding first 4 exercises which are likely compounds)
+    const accessories = selectedExercises
+      .slice(Math.min(4, selectedExercises.length)) // Skip first ~4 compounds
+      .filter((ex) => {
+        const template = templates.find((t) => t.id === ex.exerciseTemplateId);
+        return template && !isCompoundExercise(template);
+      });
+
+    // Convert last 1-2 accessories to drop sets (1 working + 2 drops)
+    let conversionsNeeded = Math.ceil((usedSeconds - availableSeconds) / 60); // roughly how many sets to save
+    let conversionsMade = 0;
+
+    for (let i = accessories.length - 1; i >= 0 && conversionsMade < 2; i--) {
+      const accessory = accessories[i];
+      if (accessory.sets < 3 || accessory.useDropSets) {
+        continue; // Skip if already has drop sets or too few sets
+      }
+
+      // Calculate time savings: replace 3 regular sets with 1 working + 2 drop sets
+      const oldTime = EXERCISE_SETUP_OVERHEAD_SECONDS + accessory.sets * SECONDS_PER_SET.isolation;
+      const newTime = estimateDropSetExerciseSeconds(3); // 1 working + 2 drops = 3 total
+      const timeSaved = oldTime - newTime;
+
+      accessory.sets = 3; // 1 working + 2 drops (stored as 3 for display)
+      accessory.useDropSets = true;
+      usedSeconds -= timeSaved;
+      conversionsMade++;
+
+      if (usedSeconds <= availableSeconds) {
+        break; // Done saving time
+      }
+    }
   }
 
   // Build summary
@@ -488,5 +646,12 @@ export async function buildDraftWorkout(
     estimatedMinutes,
     summary,
     exercises: finalExercises,
+    ...(cycle && {
+      cycleInfo: {
+        cycleId: cycle.id,
+        weekNumber: cycle.weekNumber,
+        isFixed: cycle.compoundExercises[splitDay] && compoundsSelected > 0,
+      },
+    }),
   };
 }

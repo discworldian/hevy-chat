@@ -132,6 +132,13 @@ export async function generateDraftWorkout(minutesAvailable: number, location: '
   });
 }
 
+export async function generateDraftCycle(minutesAvailable: number, location: 'home' | 'gym', includeCardio: boolean = false, includeAbdominals: boolean = false, includeWarmupCooldown: boolean = false) {
+  return fetchApi('/draft-workout/generate-cycle', {
+    method: 'POST',
+    body: JSON.stringify({ minutesAvailable, location, includeCardio, includeAbdominals, includeWarmupCooldown }),
+  });
+}
+
 export async function previewDraftPush(title: string, exercises: any[], includeWarmup: boolean = true, includeWarmupCooldown: boolean = false) {
   return fetchApi('/draft-workout/push/preview', {
     method: 'POST',
@@ -143,5 +150,20 @@ export async function confirmDraftPush(title: string, exercises: any[], previewT
   return fetchApi('/draft-workout/push/confirm', {
     method: 'POST',
     body: JSON.stringify({ title, exercises, previewToken, includeWarmup, includeWarmupCooldown }),
+  });
+}
+
+export async function getCurrentCycle() {
+  return fetchApi('/cycle/current');
+}
+
+export async function getCycleProgress() {
+  return fetchApi('/cycle/progress');
+}
+
+export async function startNewCycle(compoundExercises: { push: string[]; pull: string[]; legs: string[] }) {
+  return fetchApi('/cycle/start', {
+    method: 'POST',
+    body: JSON.stringify({ compoundExercises }),
   });
 }

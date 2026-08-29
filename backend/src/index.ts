@@ -10,6 +10,7 @@ import equipmentRouter from './routes/equipment.js';
 import pushRouter from './routes/push.js';
 import draftWorkoutRouter from './routes/draftWorkout.js';
 import settingsRouter from './routes/settings.js';
+import cycleRouter from './routes/cycle.js';
 import type { HevyApiError } from './hevyClient.js';
 
 const app = express();
@@ -26,6 +27,7 @@ app.use('/api/equipment', equipmentRouter);
 app.use('/api/push', pushRouter);
 app.use('/api/draft-workout', draftWorkoutRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/cycle', cycleRouter);
 
 // Global error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
