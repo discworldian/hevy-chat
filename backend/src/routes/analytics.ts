@@ -461,6 +461,14 @@ router.get('/recent-summary', async (req: Request, res: Response) => {
       prType: 'weight' | 'reps' | 'estimated1rm' | 'totalVolume' | 'heaviestLift' | 'highestVolumeSet' | 'distance' | 'duration';
       daysAgo: number;
     }
+
+    interface GroupedPR {
+      exerciseTitle: string;
+      date: string;
+      prTypes: string[];
+      daysAgo: number;
+    }
+
     const recentPRs: RecentPR[] = [];
 
     for (const [templateId, sessions] of Object.entries(exerciseSessions)) {
@@ -606,9 +614,27 @@ router.get('/recent-summary', async (req: Request, res: Response) => {
       }
     }
 
+    // Group PRs by exercise + date to combine multiple PRs from same session
+    const prsByExerciseDate = new Map<string, RecentPR[]>();
+    for (const pr of recentPRs) {
+      const key = `${pr.exerciseTitle}|${pr.date}`;
+      if (!prsByExerciseDate.has(key)) {
+        prsByExerciseDate.set(key, []);
+      }
+      prsByExerciseDate.get(key)!.push(pr);
+    }
+
+    // Flatten grouped PRs into single entries with combined types
+    const groupedPRs: GroupedPR[] = Array.from(prsByExerciseDate.values()).map((prs) => ({
+      exerciseTitle: prs[0].exerciseTitle,
+      date: prs[0].date,
+      prTypes: prs.map((p) => p.prType),
+      daysAgo: prs[0].daysAgo,
+    }));
+
     // Sort by date descending, take top 3
-    recentPRs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    const topRecentPRs = recentPRs.slice(0, 3);
+    groupedPRs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const topRecentPRs = groupedPRs.slice(0, 3);
 
     // Streak: consecutive trailing weeks with at least one workout
     let streakWeeks = 0;

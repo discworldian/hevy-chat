@@ -15,7 +15,7 @@ interface RecentSummary {
   thisWeekVolume: number;
   lastWeekVolume: number;
   volumeTrend: { weekLabel: string; volume: number }[];
-  recentPRs: { exerciseTitle: string; date: string; prType: 'weight' | 'reps' | 'estimated1rm' | 'totalVolume' | 'heaviestLift' | 'highestVolumeSet' | 'distance' | 'duration'; daysAgo: number }[];
+  recentPRs: { exerciseTitle: string; date: string; prTypes: string[]; daysAgo: number }[];
   streakWeeks: number;
 }
 
@@ -237,19 +237,22 @@ export default function ChartsView() {
             )}
             {recentSummary.recentPRs.length > 0 ? (
               recentSummary.recentPRs.map((pr, idx) => {
-                const prLabel = {
+                const typeLabels: Record<string, string> = {
                   weight: 'weight',
-                  reps: 'rep',
+                  reps: 'reps',
                   estimated1rm: '1RM',
                   totalVolume: 'total volume',
                   heaviestLift: 'heaviest lift',
-                  highestVolumeSet: 'highest volume set',
+                  highestVolumeSet: 'highest set',
                   distance: 'distance',
                   duration: 'duration',
-                }[pr.prType] || pr.prType;
+                };
+
+                const prList = pr.prTypes.map((type) => typeLabels[type] || type).join(' • ');
+
                 return (
                   <div key={idx} style={{ padding: '12px', background: 'var(--bg)', borderRadius: '6px', fontSize: '13px' }}>
-                    🎯 New {prLabel} PR — <strong>{pr.exerciseTitle}</strong> ({pr.daysAgo} days ago)
+                    🎯 <strong>{pr.exerciseTitle}</strong> — {prList} ({pr.daysAgo}d ago)
                   </div>
                 );
               })
