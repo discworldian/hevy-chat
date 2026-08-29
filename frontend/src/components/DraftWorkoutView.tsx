@@ -408,13 +408,13 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
                 className={settings.draftMode === 'single' ? 'active' : ''}
                 onClick={() => setSettings({ ...settings, draftMode: 'single' })}
               >
-                Single
+                Single Session
               </button>
               <button
                 className={settings.draftMode === 'cycle' ? 'active' : ''}
                 onClick={() => setSettings({ ...settings, draftMode: 'cycle' })}
               >
-                Full Cycle
+                8 Week Cycle
               </button>
             </div>
           </div>
