@@ -108,4 +108,5 @@ export interface DraftWorkout {
     weekNumber: number;
     isFixed: boolean;
   };
+  nudges?: string[];
 }

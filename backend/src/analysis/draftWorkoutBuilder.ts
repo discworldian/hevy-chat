@@ -10,6 +10,7 @@ import { isCompoundExercise, roundToNearestIncrement, getIncrementForExercise } 
 import type { SplitDay } from './splitDefinitions.js';
 import { getMuscleGroupsForSplit, getOptionalMuscleGroups } from './splitDefinitions.js';
 import type { TrainingCycle } from './cycleManager.js';
+import { generateNudges } from './motivationalNudges.js';
 
 const MUSCLE_GROUP_REGION: Record<string, 'upper' | 'lower' | 'core'> = {
   quadriceps: 'lower', glutes: 'lower', hamstrings: 'lower', calves: 'lower', lower_back: 'lower',
@@ -47,6 +48,7 @@ export interface DraftWorkout {
     weekNumber: number;
     isFixed: boolean; // true if using cycle's fixed compounds
   };
+  nudges?: string[];
 }
 
 type DraftWorkoutError = { status: 'time_too_short'; minMinutesNeeded: number };
@@ -640,6 +642,15 @@ export async function buildDraftWorkout(
     });
   }
 
+  // Generate motivational nudges
+  const nudges = await generateNudges({
+    cycle: cycle || null,
+    workouts,
+    templates,
+    draftExercises: finalExercises,
+    splitDay,
+  });
+
   return {
     location,
     minutesAvailable,
@@ -653,5 +664,6 @@ export async function buildDraftWorkout(
         isFixed: cycle.compoundExercises[splitDay] && compoundsSelected > 0,
       },
     }),
+    ...(nudges.length > 0 && { nudges }),
   };
 }

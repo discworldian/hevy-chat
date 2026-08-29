@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import * as api from '../api.js';
 import type { DraftWorkout, DraftWorkoutExercise, ExerciseTemplate } from '../types.js';
 import ErrorBanner from './ErrorBanner.jsx';
+import NudgeBanner from './NudgeBanner.jsx';
 import CycleSetupView from './CycleSetupView.jsx';
 import HierarchicalExerciseSelector from './HierarchicalExerciseSelector.jsx';
 
@@ -577,10 +578,13 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
   if (step === 'generated' && draft && Array.isArray(draft)) {
     const weekDrafts = draft.slice(cycleViewIndex * 3, cycleViewIndex * 3 + 3);
     const currentWeek = cycleViewIndex + 1;
+    const firstNudges = draft[0]?.nudges || [];
 
     return (
       <div className="panel">
         <h2>Draft Workout</h2>
+
+        {firstNudges.length > 0 && <NudgeBanner messages={firstNudges} />}
 
         <div style={{ marginBottom: '16px', padding: '12px', background: 'var(--bg)', borderRadius: '4px' }}>
           <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
@@ -721,6 +725,8 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
           </div>
         )}
         {error && <ErrorBanner message={error} />}
+
+        {currentDraft.nudges && <NudgeBanner messages={currentDraft.nudges} />}
 
         <div style={{ marginBottom: '20px', padding: '12px', backgroundColor: 'var(--bg)', borderRadius: '6px' }}>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{currentDraft.summary}</div>
