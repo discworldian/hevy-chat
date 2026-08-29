@@ -110,3 +110,21 @@ export interface DraftWorkout {
   };
   nudges?: string[];
 }
+
+export interface ExerciseProgressSet {
+  reps: number;
+  targetReps: number;
+  weight: number;
+  classification: 'hit' | 'exceeded' | 'missed';
+}
+
+export interface ExerciseProgressSession {
+  date: string;
+  estimated1RM: number;
+  bestSetVolume: number;
+  sets: ExerciseProgressSet[];
+}
+
+export interface ExerciseCycleProgress {
+  sessions: ExerciseProgressSession[];
+}

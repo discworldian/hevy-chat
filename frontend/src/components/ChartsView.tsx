@@ -3,6 +3,7 @@ import * as api from '../api.js';
 import type { Workout } from '../types.js';
 import ErrorBanner from './ErrorBanner.jsx';
 import MuscleVolumeRadar from './charts/MuscleVolumeRadar.jsx';
+import ExerciseProgressPanel from './ExerciseProgressPanel.jsx';
 
 interface MuscleVolumeData {
   muscle: string;
@@ -17,6 +18,8 @@ export default function ChartsView() {
   const [radarLoading, setRadarLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [radarError, setRadarError] = useState<string | null>(null);
+  const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
+  const [selectedExerciseName, setSelectedExerciseName] = useState<string>('');
 
   useEffect(() => {
     const load = async () => {
@@ -113,11 +116,11 @@ export default function ChartsView() {
   })();
 
   // Top exercises by volume
-  const exerciseVolume: Record<string, { name: string; volume: number; sessions: number }> = {};
+  const exerciseVolume: Record<string, { templateId: string; name: string; volume: number; sessions: number }> = {};
   for (const workout of workouts) {
     for (const exercise of workout.exercises) {
       if (!exerciseVolume[exercise.exercise_template_id]) {
-        exerciseVolume[exercise.exercise_template_id] = { name: exercise.title, volume: 0, sessions: 0 };
+        exerciseVolume[exercise.exercise_template_id] = { templateId: exercise.exercise_template_id, name: exercise.title, volume: 0, sessions: 0 };
       }
       exerciseVolume[exercise.exercise_template_id].sessions++;
 
@@ -132,6 +135,23 @@ export default function ChartsView() {
   const topExercises = Object.values(exerciseVolume)
     .sort((a, b) => b.volume - a.volume)
     .slice(0, 5);
+
+  // Show progress panel if one is selected
+  if (selectedExerciseId) {
+    return (
+      <div className="panel">
+        <h2>Analytics & Charts</h2>
+        <ExerciseProgressPanel
+          templateId={selectedExerciseId}
+          exerciseName={selectedExerciseName}
+          onClose={() => {
+            setSelectedExerciseId(null);
+            setSelectedExerciseName('');
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="panel">
@@ -170,12 +190,32 @@ export default function ChartsView() {
         <h3 style={{ marginBottom: '12px', fontSize: '16px' }}>top exercises by volume</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {topExercises.map((ex) => (
-            <div key={ex.name} style={{ padding: '12px', background: 'var(--bg)', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
+            <div key={ex.templateId} style={{ padding: '12px', background: 'var(--bg)', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+              <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 500, fontSize: '14px' }}>{ex.name}</div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{ex.sessions} sessions</div>
               </div>
-              <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--accent)' }}>{Math.round(ex.volume).toLocaleString()}kg</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--accent)' }}>{Math.round(ex.volume).toLocaleString()}kg</div>
+                <button
+                  onClick={() => {
+                    setSelectedExerciseId(ex.templateId);
+                    setSelectedExerciseName(ex.name);
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--accent)',
+                    backgroundColor: 'transparent',
+                    color: 'var(--accent)',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                  }}
+                >
+                  View progress
+                </button>
+              </div>
             </div>
           ))}
         </div>

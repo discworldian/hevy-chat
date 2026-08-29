@@ -178,3 +178,19 @@ export async function pushCycleToHevy(workouts: any[], includeWarmup: boolean = 
 export async function getMuscleVolumeWeekly(weeksBack: number = 2) {
   return fetchApi(`/analytics/muscle-volume-weekly?weeksBack=${weeksBack}`);
 }
+
+export async function getExerciseCycleProgress(templateId: string, cycleId?: string) {
+  let url = `/analytics/exercise/${templateId}/cycle-progress`;
+  if (cycleId) {
+    url += `?cycleId=${cycleId}`;
+  }
+  return fetchApi(url);
+}
+
+export async function getCycleReport(cycleId?: string) {
+  let url = '/analytics/cycle-report';
+  if (cycleId) {
+    url += `?cycleId=${cycleId}`;
+  }
+  return fetchApi(url);
+}

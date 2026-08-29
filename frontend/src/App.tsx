@@ -7,9 +7,10 @@ import PlanView from './components/PlanView.jsx';
 import ChartsView from './components/ChartsView.jsx';
 import DraftWorkoutView from './components/DraftWorkoutView.jsx';
 import SettingsView from './components/SettingsView.jsx';
+import CycleReportView from './components/CycleReportView.jsx';
 import ErrorBanner from './components/ErrorBanner.jsx';
 
-type Tab = 'history' | 'plan' | 'charts' | 'draft' | 'settings';
+type Tab = 'history' | 'plan' | 'charts' | 'draft' | 'settings' | 'cycleReport';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('history');
@@ -69,6 +70,7 @@ export default function App() {
         {activeTab === 'charts' && <ChartsView />}
         {activeTab === 'draft' && <DraftWorkoutView location={location} />}
         {activeTab === 'settings' && <SettingsView />}
+        {activeTab === 'cycleReport' && <CycleReportView />}
       </div>
 
       <footer className="app-footer">

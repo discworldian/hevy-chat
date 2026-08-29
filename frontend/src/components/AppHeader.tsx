@@ -1,7 +1,7 @@
 
 interface Props {
-  activeTab: 'history' | 'plan' | 'charts' | 'draft' | 'settings';
-  setActiveTab: (tab: 'history' | 'plan' | 'charts' | 'draft' | 'settings') => void;
+  activeTab: 'history' | 'plan' | 'charts' | 'draft' | 'settings' | 'cycleReport';
+  setActiveTab: (tab: 'history' | 'plan' | 'charts' | 'draft' | 'settings' | 'cycleReport') => void;
   location: 'home' | 'gym';
   setLocation: (loc: 'home' | 'gym') => void;
 }
@@ -46,6 +46,12 @@ export default function AppHeader({ activeTab, setActiveTab }: Props) {
           onClick={() => setActiveTab('settings')}
         >
           Settings
+        </button>
+        <button
+          className={activeTab === 'cycleReport' ? 'active' : ''}
+          onClick={() => setActiveTab('cycleReport')}
+        >
+          Cycle Report
         </button>
       </div>
     </div>
