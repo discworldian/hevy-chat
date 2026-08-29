@@ -2,11 +2,21 @@ import { useEffect, useState } from 'react';
 import * as api from '../api.js';
 import type { Workout } from '../types.js';
 import ErrorBanner from './ErrorBanner.jsx';
+import MuscleVolumeRadar from './charts/MuscleVolumeRadar.jsx';
+
+interface MuscleVolumeData {
+  muscle: string;
+  thisWeek: number;
+  lastWeek: number;
+}
 
 export default function ChartsView() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [muscleVolumeData, setMuscleVolumeData] = useState<MuscleVolumeData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [radarLoading, setRadarLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [radarError, setRadarError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -22,6 +32,53 @@ export default function ChartsView() {
     };
 
     load();
+  }, []);
+
+  useEffect(() => {
+    const loadRadar = async () => {
+      setRadarLoading(true);
+      setRadarError(null);
+      try {
+        const result = (await api.getMuscleVolumeWeekly(2)) as any;
+        if (result.weeks && result.weeks.length >= 2) {
+          const weeks = result.weeks;
+          const thisWeek = weeks[weeks.length - 1].muscleVolume;
+          const lastWeek = weeks[weeks.length - 2].muscleVolume;
+
+          const MUSCLE_GROUP_AXES = [
+            'chest', 'shoulders', 'triceps', 'lats', 'upper_back', 'traps',
+            'biceps', 'forearms', 'quadriceps', 'glutes', 'hamstrings',
+            'calves', 'lower_back', 'adductors', 'abdominals',
+          ];
+
+          const data: MuscleVolumeData[] = MUSCLE_GROUP_AXES.map((muscle) => ({
+            muscle,
+            thisWeek: thisWeek[muscle] || 0,
+            lastWeek: lastWeek[muscle] || 0,
+          }));
+
+          // Normalize by max for each muscle group so radar stays readable
+          const maxByMuscle: Record<string, number> = {};
+          for (const d of data) {
+            maxByMuscle[d.muscle] = Math.max(d.thisWeek, d.lastWeek, 1);
+          }
+
+          const normalized = data.map((d) => ({
+            ...d,
+            thisWeek: d.thisWeek / maxByMuscle[d.muscle],
+            lastWeek: d.lastWeek / maxByMuscle[d.muscle],
+          }));
+
+          setMuscleVolumeData(normalized);
+        }
+      } catch (err: any) {
+        setRadarError(err.message);
+      } finally {
+        setRadarLoading(false);
+      }
+    };
+
+    loadRadar();
   }, []);
 
   if (error) return <ErrorBanner message={error} />;
@@ -101,6 +158,11 @@ export default function ChartsView() {
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Avg Duration</div>
           <div style={{ fontSize: '28px', fontWeight: 600 }}>{avgSessionDuration}m</div>
         </div>
+      </div>
+
+      {/* Muscle Volume Radar Chart */}
+      <div style={{ marginBottom: '24px', paddingBottom: '24px', borderBottom: '1px solid var(--border)' }}>
+        <MuscleVolumeRadar data={muscleVolumeData} loading={radarLoading} error={radarError} />
       </div>
 
       {/* Top Exercises */}

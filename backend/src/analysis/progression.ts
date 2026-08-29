@@ -8,7 +8,7 @@ interface SessionData {
   sets: WorkoutSet[];
 }
 
-function computeEstimated1RM(weightKg: number, reps: number): number {
+export function computeEstimated1RM(weightKg: number, reps: number): number {
   // Epley formula: weight × (1 + reps / 30)
   return weightKg * (1 + reps / 30);
 }

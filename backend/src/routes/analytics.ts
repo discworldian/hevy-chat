@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import * as cache from '../cache.js';
+import { computeMuscleVolumeForRange, MUSCLE_GROUP_AXES } from '../analysis/muscleVolume.js';
 
 const router = Router();
 
@@ -43,5 +44,35 @@ router.get('/exercise/:templateId', async (req: Request, res: Response) => {
   }
 });
 
+router.get('/muscle-volume-weekly', async (req: Request, res: Response) => {
+  try {
+    const weeksBack = Math.max(1, parseInt(req.query.weeksBack as string) || 2);
+    const workoutsCache = await cache.readWorkouts();
+    const templatesCache = await cache.readTemplates();
+
+    const weeks = [];
+    const now = new Date();
+
+    // Generate last weeksBack weeks (7-day windows ending today)
+    for (let i = weeksBack - 1; i >= 0; i--) {
+      const endDate = new Date(now);
+      endDate.setDate(endDate.getDate() - i * 7);
+      endDate.setHours(23, 59, 59, 999);
+
+      const startDate = new Date(endDate);
+      startDate.setDate(startDate.getDate() - 6);
+      startDate.setHours(0, 0, 0, 0);
+
+      const muscleVolume = computeMuscleVolumeForRange(workoutsCache.workouts, templatesCache.templates, startDate, endDate);
+
+      const weekLabel = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      weeks.push({ weekLabel, muscleVolume });
+    }
+
+    res.json({ weeks });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message, retryable: true });
+  }
+});
 
 export default router;

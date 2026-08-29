@@ -111,7 +111,7 @@ The user wants an optional warm-up set before working sets on a per-exercise bas
 ## 5. 8-Week Training Cycle
 
 ### Context
-The user wants compound exercises to stay fixed for 8 weeks to track progression, with accessories rotating every 2-4 weeks for variety. At the end of 8 weeks, a cycle report is generated.
+The user wants compound exercises to stay fixed for 8 weeks to track progression, with accessories rotating every 2-4 weeks for variety. At the end of 8 weeks, a cycle report is generated. A version should exist for both home and gym.
 
 ### Changes
 
@@ -283,6 +283,7 @@ The user wants motivational statements to appear when generating or viewing a dr
   - **Science tidbit**: Rotating pool of short, cited statements. E.g. "Meta-analyses show consistent training beats any specific programme design (Schoenfeld 2016)."
   - **Animal weight**: Use existing silly weight feature. "Your squat 1RM is roughly one adult Labrador."
 - Select 1-2 nudges per draft generation, prioritising PR proximity and cycle progress.
+- Where possible, use links both to scientific and silly nudges.
 
 **Frontend: modify `DraftWorkoutView.tsx`**
 - Display nudges in a subtle banner above the exercise list in the generated view.

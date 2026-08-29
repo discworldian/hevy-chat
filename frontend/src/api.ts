@@ -174,3 +174,7 @@ export async function pushCycleToHevy(workouts: any[], includeWarmup: boolean = 
     body: JSON.stringify({ workouts, includeWarmup, includeWarmupCooldown }),
   });
 }
+
+export async function getMuscleVolumeWeekly(weeksBack: number = 2) {
+  return fetchApi(`/analytics/muscle-volume-weekly?weeksBack=${weeksBack}`);
+}

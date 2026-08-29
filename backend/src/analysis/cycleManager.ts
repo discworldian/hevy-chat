@@ -2,10 +2,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import type { SplitDay } from './splitDefinitions.js';
+import type { Workout } from '../hevyTypes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '../../data');
 const cycleFile = path.join(dataDir, 'training_cycle.json');
+const archivedCyclesFile = path.join(dataDir, 'archived_cycles.json');
 
 export interface TrainingCycle {
   id: string;
@@ -14,6 +16,10 @@ export interface TrainingCycle {
   weekNumber: number; // 1-8, derived from startDate
   compoundExercises: Record<SplitDay, string[]>; // template IDs
   accessoryRotationWeek: number; // tracks when accessories last rotated
+}
+
+export interface ArchivedCycle extends TrainingCycle {
+  archivedAt: string; // ISO date
 }
 
 async function ensureDataDir() {
@@ -37,6 +43,21 @@ async function readCycleFile(): Promise<TrainingCycle | null> {
 async function writeCycleFile(cycle: TrainingCycle): Promise<void> {
   await ensureDataDir();
   await fs.writeFile(cycleFile, JSON.stringify(cycle, null, 2));
+}
+
+async function readArchivedCyclesFile(): Promise<ArchivedCycle[]> {
+  await ensureDataDir();
+  try {
+    const data = await fs.readFile(archivedCyclesFile, 'utf-8');
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
+}
+
+async function writeArchivedCyclesFile(cycles: ArchivedCycle[]): Promise<void> {
+  await ensureDataDir();
+  await fs.writeFile(archivedCyclesFile, JSON.stringify(cycles, null, 2));
 }
 
 export function calculateCycleWeekNumber(startDate: string): number {
@@ -66,11 +87,14 @@ export async function startNewCycle(
 
   // Archive current cycle if active
   if (currentCycle && !currentCycle.endDate) {
-    const archived = {
+    const archived: ArchivedCycle = {
       ...currentCycle,
       endDate: new Date().toISOString().split('T')[0],
+      archivedAt: new Date().toISOString().split('T')[0],
     };
-    // In a more complete implementation, store archived cycles in a separate file
+    const allArchived = await readArchivedCyclesFile();
+    allArchived.push(archived);
+    await writeArchivedCyclesFile(allArchived);
   }
 
   const newCycle: TrainingCycle = {
@@ -131,4 +155,26 @@ export async function getCycleProgress(): Promise<{
     weekPercentage,
     daysRemaining,
   };
+}
+
+export async function getCycleById(cycleId: string): Promise<(TrainingCycle | ArchivedCycle) | null> {
+  // Check current cycle first
+  const current = await readCycleFile();
+  if (current && current.id === cycleId) {
+    return current;
+  }
+
+  // Check archived cycles
+  const archived = await readArchivedCyclesFile();
+  return archived.find((c) => c.id === cycleId) || null;
+}
+
+export function getWorkoutsInRange(workouts: Workout[], startDate: string, endDate: string): Workout[] {
+  const startMs = new Date(startDate).getTime();
+  const endMs = new Date(endDate).getTime();
+
+  return workouts.filter((w) => {
+    const workoutMs = new Date(w.start_time).getTime();
+    return workoutMs >= startMs && workoutMs <= endMs;
+  });
 }
