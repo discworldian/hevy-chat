@@ -19,13 +19,27 @@ interface Props {
   error?: string | null;
 }
 
-// Region labels overlay (outside recharts, positioned absolutely)
+// Region labels overlay using curved text paths
 function RegionLabelsOverlay() {
-  const regions = [
-    { name: 'UPPER', angle: 90, color: 'var(--accent)' },
-    { name: 'LOWER', angle: 270, color: 'var(--ok)' },
-    { name: 'CORE', angle: 180, color: 'var(--text-muted)' },
-  ];
+  const radius = 42;
+  const centerX = 50;
+  const centerY = 50;
+
+  // Calculate arc paths for curved text
+  const createArcPath = (startAngle: number, endAngle: number) => {
+    const start = polarToCartesian(centerX, centerY, radius, endAngle);
+    const end = polarToCartesian(centerX, centerY, radius, startAngle);
+    const largeArc = endAngle - startAngle <= 180 ? '0' : '1';
+    return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 0 ${end.x} ${end.y}`;
+  };
+
+  const polarToCartesian = (cx: number, cy: number, r: number, angle: number) => {
+    const rad = (angle * Math.PI) / 180;
+    return {
+      x: cx + r * Math.cos(rad),
+      y: cy + r * Math.sin(rad),
+    };
+  };
 
   return (
     <svg
@@ -38,24 +52,58 @@ function RegionLabelsOverlay() {
         pointerEvents: 'none',
       }}
       viewBox="0 0 100 100"
-      preserveAspectRatio="none"
+      preserveAspectRatio="xMidYMid meet"
     >
-      {regions.map((region) => (
-        <g key={region.name} transform={`rotate(${region.angle} 50 50)`}>
-          <text
-            x={50}
-            y={5}
-            textAnchor="middle"
-            fontSize="10"
-            fontWeight="600"
-            fill={region.color}
-            opacity="0.7"
-            style={{ pointerEvents: 'none' }}
-          >
-            {region.name}
-          </text>
-        </g>
-      ))}
+      <defs>
+        {/* Arc path for UPPER (top, 60-120°) */}
+        <path id="arcUpper" d={createArcPath(60, 120)} fill="none" />
+        {/* Arc path for LOWER (bottom, 240-300°) */}
+        <path id="arcLower" d={createArcPath(240, 300)} fill="none" />
+        {/* Arc path for CORE (right, 150-210°) */}
+        <path id="arcCore" d={createArcPath(150, 210)} fill="none" />
+      </defs>
+
+      {/* UPPER label */}
+      <text
+        fontSize="11"
+        fontWeight="600"
+        fill="var(--accent)"
+        opacity="0.8"
+        letterSpacing="2"
+        style={{ pointerEvents: 'none' }}
+      >
+        <textPath href="#arcUpper" startOffset="50%" textAnchor="middle">
+          UPPER BODY
+        </textPath>
+      </text>
+
+      {/* LOWER label */}
+      <text
+        fontSize="11"
+        fontWeight="600"
+        fill="var(--ok)"
+        opacity="0.8"
+        letterSpacing="2"
+        style={{ pointerEvents: 'none' }}
+      >
+        <textPath href="#arcLower" startOffset="50%" textAnchor="middle">
+          LOWER BODY
+        </textPath>
+      </text>
+
+      {/* CORE label */}
+      <text
+        fontSize="11"
+        fontWeight="600"
+        fill="var(--text-muted)"
+        opacity="0.8"
+        letterSpacing="2"
+        style={{ pointerEvents: 'none' }}
+      >
+        <textPath href="#arcCore" startOffset="50%" textAnchor="middle">
+          CORE
+        </textPath>
+      </text>
     </svg>
   );
 }
