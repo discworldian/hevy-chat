@@ -167,3 +167,10 @@ export async function startNewCycle(compoundExercises: { push: string[]; pull: s
     body: JSON.stringify({ compoundExercises }),
   });
 }
+
+export async function pushCycleToHevy(workouts: any[], includeWarmup: boolean = true, includeWarmupCooldown: boolean = false) {
+  return fetchApi('/draft-workout/push/cycle', {
+    method: 'POST',
+    body: JSON.stringify({ workouts, includeWarmup, includeWarmupCooldown }),
+  });
+}

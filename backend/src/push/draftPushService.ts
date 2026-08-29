@@ -102,3 +102,45 @@ export async function confirmPush(
     title: result.title,
   };
 }
+
+export async function confirmCyclePush(
+  workouts: Array<{ exercises: DraftWorkoutExercise[]; weekNumber: number; summary: string }>,
+  includeWarmup: boolean = true,
+  includeWarmupCooldown: boolean = false,
+): Promise<{ folderId: string; folderTitle: string; routineCount: number; routines: Array<{ id: string; title: string }> }> {
+  // Create routine folder for the 8-week cycle
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const folderTitle = `8-Week Cycle - ${today}`;
+  const folder = await hevyClient.createRoutineFolder(folderTitle);
+
+  const createdRoutines: Array<{ id: string; title: string }> = [];
+
+  try {
+    // Push each of the 24 workouts to the folder
+    for (const workout of workouts) {
+      const routineTitle = workout.summary;
+      const payload = buildCreateRoutinePayload(
+        routineTitle,
+        workout.exercises,
+        folder.id,
+        includeWarmup,
+        includeWarmupCooldown,
+      );
+
+      const routine = await hevyClient.createRoutine(payload);
+      createdRoutines.push({
+        id: routine.id,
+        title: routine.title,
+      });
+    }
+  } catch (err) {
+    throw new Error(`Failed to create cycle routines: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  return {
+    folderId: folder.id,
+    folderTitle: folder.title,
+    routineCount: createdRoutines.length,
+    routines: createdRoutines,
+  };
+}

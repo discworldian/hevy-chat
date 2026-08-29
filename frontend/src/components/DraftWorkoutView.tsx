@@ -3,6 +3,7 @@ import * as api from '../api.js';
 import type { DraftWorkout, DraftWorkoutExercise, ExerciseTemplate } from '../types.js';
 import ErrorBanner from './ErrorBanner.jsx';
 import CycleSetupView from './CycleSetupView.jsx';
+import HierarchicalExerciseSelector from './HierarchicalExerciseSelector.jsx';
 
 interface Props {
   location: 'home' | 'gym';
@@ -245,8 +246,29 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
   };
 
   const handlePreview = async () => {
-    if (!draft || Array.isArray(draft)) return;
+    if (!draft) return;
 
+    if (Array.isArray(draft)) {
+      // Cycle mode: show cycle push preview
+      setPreviewLines([
+        `Creating 8-week cycle program with 24 routines`,
+        `Starting: ${new Date().toLocaleDateString()}`,
+        '',
+        `Week breakdown:`,
+        ...Array.from({ length: 8 }, (_, week) => {
+          const weekWorkouts = draft.slice(week * 3, week * 3 + 3);
+          const totalMin = weekWorkouts.reduce((sum, w: any) => sum + (w.estimatedMinutes || 0), 0);
+          return `  Week ${week + 1}: ${weekWorkouts.length} workouts, ~${totalMin} min total`;
+        }),
+        '',
+        `Each routine will be organized in a folder for easy access in Hevy.`,
+      ]);
+      setPreviewToken('cycle-preview');
+      setStep('preview');
+      return;
+    }
+
+    // Single mode: original flow
     try {
       setLoading(true);
       const result = (await api.previewDraftPush(
@@ -269,19 +291,37 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
   };
 
   const handleConfirm = async () => {
-    if (!draft || Array.isArray(draft) || !previewToken) return;
+    if (!draft || !previewToken) return;
 
     try {
       setConfirming(true);
-      const result = (await api.confirmDraftPush(
-        routineTitle,
-        draft.exercises,
-        previewToken,
-        settings.includeWarmup,
-        settings.includeWarmupCooldown,
-      )) as { id: string; title: string };
-      setConfirmedRoutine(result);
-      setStep('confirmed');
+
+      if (Array.isArray(draft)) {
+        // Cycle mode: push all 24 workouts
+        const result = (await api.pushCycleToHevy(
+          draft,
+          settings.includeWarmup,
+          settings.includeWarmupCooldown,
+        )) as {
+          folderId: string;
+          folderTitle: string;
+          routineCount: number;
+          routines: Array<{ id: string; title: string }>;
+        };
+        setConfirmedRoutine(result as any);
+        setStep('confirmed');
+      } else {
+        // Single mode: original flow
+        const result = (await api.confirmDraftPush(
+          routineTitle,
+          draft.exercises,
+          previewToken,
+          settings.includeWarmup,
+          settings.includeWarmupCooldown,
+        )) as { id: string; title: string };
+        setConfirmedRoutine(result);
+        setStep('confirmed');
+      }
     } catch (err: any) {
       setError(err.message);
       setStep('preview'); // Go back to preview on failure
@@ -966,35 +1006,11 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
           )}
 
           {allExercises.length > 0 && (
-            <select
-              onChange={(e) => {
-                if (e.target.value) {
-                  handleAddExercise(e.target.value);
-                  e.target.value = '';
-                }
-              }}
-              style={{
-                width: '100%',
-                padding: '8px',
-                borderRadius: '6px',
-                border: '1px solid var(--border)',
-                backgroundColor: 'var(--bg)',
-                color: 'var(--text)',
-                fontSize: '13px',
-                marginBottom: '16px',
-              }}
-            >
-              <option value="">+ Add exercise</option>
-              {allExercises.map((ex) => {
-                const alreadySelected = (draft as DraftWorkout).exercises.some((e) => e.exerciseTemplateId === ex.templateId);
-                return (
-                  <option key={ex.templateId} value={ex.templateId} disabled={alreadySelected}>
-                    {ex.name} ({ex.primaryMuscleGroup})
-                    {alreadySelected ? ' ✓' : ''}
-                  </option>
-                );
-              })}
-            </select>
+            <HierarchicalExerciseSelector
+              allExercises={allExercises}
+              selectedExercises={(draft as DraftWorkout).exercises}
+              onSelectExercise={handleAddExercise}
+            />
           )}
         </div>
 
@@ -1107,17 +1123,49 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
 
   // Confirmed step
   if (step === 'confirmed' && confirmedRoutine) {
+    const isCycleFolder = 'folderId' in confirmedRoutine && 'routineCount' in confirmedRoutine;
+
     return (
       <div className="panel">
         <h2>Success!</h2>
 
-        <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: 'var(--bg)', borderRadius: '6px' }}>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '4px' }}>Created routine:</div>
-          <div style={{ fontSize: '16px', fontWeight: 600 }}>{confirmedRoutine.title}</div>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
-            ID: <code>{confirmedRoutine.id}</code>
+        {isCycleFolder ? (
+          <>
+            <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: 'var(--bg)', borderRadius: '6px' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '4px' }}>Created 8-week cycle folder:</div>
+              <div style={{ fontSize: '16px', fontWeight: 600 }}>{(confirmedRoutine as any).folderTitle}</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                {(confirmedRoutine as any).routineCount} routines organized for 8 weeks of training
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '20px', padding: '12px', backgroundColor: 'var(--bg-elevated)', borderRadius: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+              <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '8px', color: 'var(--text-muted)' }}>
+                Created routines:
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {((confirmedRoutine as any).routines || []).slice(0, 10).map((r: any) => (
+                  <div key={r.id} style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    ✓ {r.title}
+                  </div>
+                ))}
+                {((confirmedRoutine as any).routines || []).length > 10 && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                    + {((confirmedRoutine as any).routines || []).length - 10} more routines...
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: 'var(--bg)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '4px' }}>Created routine:</div>
+            <div style={{ fontSize: '16px', fontWeight: 600 }}>{(confirmedRoutine as any).title}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+              ID: <code>{(confirmedRoutine as any).id}</code>
+            </div>
           </div>
-        </div>
+        )}
 
         <button
           onClick={handleReset}

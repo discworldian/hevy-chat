@@ -137,4 +137,23 @@ router.post('/push/confirm', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/push/cycle', async (req: Request, res: Response) => {
+  try {
+    const { workouts, includeWarmup, includeWarmupCooldown } = req.body;
+
+    if (!Array.isArray(workouts)) {
+      return res.status(400).json({ error: 'workouts must be an array' });
+    }
+
+    if (workouts.length !== 24) {
+      return res.status(400).json({ error: 'cycle must contain exactly 24 workouts (8 weeks × 3 splits)' });
+    }
+
+    const result = await pushService.confirmCyclePush(workouts, includeWarmup === true, includeWarmupCooldown === true);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message, retryable: true });
+  }
+});
+
 export default router;
