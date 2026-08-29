@@ -571,7 +571,7 @@ export default function HistoryView({ location }: Props) {
                                   ◆ {labelText}
                                 </div>
                               )}
-                              {group.exercises.map((ex: any) => {
+                              {group.exercises.map((ex: any, exIdx: number) => {
                                 const nonWarmupSets = ex.sets.filter((s: any) => s.type !== 'warmup');
                                 const setsWithRPE = nonWarmupSets.filter((s: any) => s.rpe);
                                 const avgRPE = setsWithRPE.length > 0
@@ -583,7 +583,7 @@ export default function HistoryView({ location }: Props) {
 
                                 return (
                                   <div
-                                    key={ex.exercise_template_id}
+                                    key={`${groupIdx}-${exIdx}`}
                                     style={{
                                       padding: '12px',
                                       background: 'var(--bg)',

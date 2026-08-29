@@ -31,6 +31,7 @@ interface DraftSettings {
 }
 
 export default function DraftWorkoutView({ location: globalLocation }: Props) {
+  const [skipCycleSetup, setSkipCycleSetup] = useState(false); // Skip cycle setup to draft single session
   const [settings, setSettings] = useState<DraftSettings>({
     minutesAvailable: 45,
     location: globalLocation,
@@ -55,6 +56,13 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
   const [activeCycle, setActiveCycle] = useState<any | null>(undefined); // undefined = loading, null = no cycle, object = active cycle
   const [cycleProgress, setCycleProgress] = useState<any | null>(null);
   const [cycleViewIndex, setCycleViewIndex] = useState(0); // Which week to view when displaying full cycle
+
+  // Auto-switch to single mode when skipping cycle setup
+  useEffect(() => {
+    if (skipCycleSetup) {
+      setSettings((s) => ({ ...s, draftMode: 'single' }));
+    }
+  }, [skipCycleSetup]);
 
   // Load available exercises on mount
   useEffect(() => {
@@ -333,8 +341,57 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     );
   }
 
-  // Show cycle setup if no active cycle
-  if (!activeCycle) {
+  // Show cycle setup choice if no active cycle and not skipping
+  if (!activeCycle && !skipCycleSetup) {
+    return (
+      <div className="panel">
+        <h2>Draft Workout</h2>
+        <div style={{ textAlign: 'center', padding: '24px' }}>
+          <div style={{ marginBottom: '24px' }}>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+              What would you like to do?
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setSkipCycleSetup(false)}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: 'var(--ok)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                }}
+              >
+                Start 8-Week Cycle
+              </button>
+              <button
+                onClick={() => setSkipCycleSetup(true)}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: 'var(--accent)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                }}
+              >
+                Draft Single Session
+              </button>
+            </div>
+          </div>
+        </div>
+        <CycleSetupView onCycleStarted={() => setActiveCycle(true)} />
+      </div>
+    );
+  }
+
+  // Show cycle setup if no active cycle but they chose to start one
+  if (!activeCycle && skipCycleSetup === false) {
     return <CycleSetupView onCycleStarted={() => setActiveCycle(true)} />;
   }
 
