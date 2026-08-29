@@ -15,7 +15,7 @@ interface RecentSummary {
   thisWeekVolume: number;
   lastWeekVolume: number;
   volumeTrend: { weekLabel: string; volume: number }[];
-  recentPRs: { exerciseTitle: string; date: string; prType: 'weight' | 'reps' | 'estimated1rm'; daysAgo: number }[];
+  recentPRs: { exerciseTitle: string; date: string; prType: 'weight' | 'reps' | 'estimated1rm' | 'totalVolume' | 'heaviestLift' | 'highestVolumeSet' | 'distance' | 'duration'; daysAgo: number }[];
   streakWeeks: number;
 }
 
@@ -236,11 +236,23 @@ export default function ChartsView() {
               </div>
             )}
             {recentSummary.recentPRs.length > 0 ? (
-              recentSummary.recentPRs.map((pr, idx) => (
-                <div key={idx} style={{ padding: '12px', background: 'var(--bg)', borderRadius: '6px', fontSize: '13px' }}>
-                  🎯 New {pr.prType === 'weight' ? 'weight' : pr.prType === 'reps' ? 'rep' : '1RM'} PR — <strong>{pr.exerciseTitle}</strong> ({pr.daysAgo} days ago)
-                </div>
-              ))
+              recentSummary.recentPRs.map((pr, idx) => {
+                const prLabel = {
+                  weight: 'weight',
+                  reps: 'rep',
+                  estimated1rm: '1RM',
+                  totalVolume: 'total volume',
+                  heaviestLift: 'heaviest lift',
+                  highestVolumeSet: 'highest volume set',
+                  distance: 'distance',
+                  duration: 'duration',
+                }[pr.prType] || pr.prType;
+                return (
+                  <div key={idx} style={{ padding: '12px', background: 'var(--bg)', borderRadius: '6px', fontSize: '13px' }}>
+                    🎯 New {prLabel} PR — <strong>{pr.exerciseTitle}</strong> ({pr.daysAgo} days ago)
+                  </div>
+                );
+              })
             ) : (
               <div style={{ padding: '12px', background: 'var(--bg)', borderRadius: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>
                 No recent PRs. Keep training!

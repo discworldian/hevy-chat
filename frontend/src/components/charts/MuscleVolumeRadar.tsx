@@ -43,7 +43,7 @@ export default function MuscleVolumeRadar({ data, title = 'Muscle Volume Compari
       <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px', color: 'var(--text)' }}>
         {title}
       </div>
-      <div style={{ position: 'relative' }}>
+      <div>
         <ResponsiveContainer width="100%" height={300}>
           <RadarChart data={data} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
             <PolarGrid stroke="var(--border)" />

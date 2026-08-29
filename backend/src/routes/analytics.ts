@@ -458,7 +458,7 @@ router.get('/recent-summary', async (req: Request, res: Response) => {
     interface RecentPR {
       exerciseTitle: string;
       date: string;
-      prType: 'weight' | 'reps' | 'estimated1rm';
+      prType: 'weight' | 'reps' | 'estimated1rm' | 'totalVolume' | 'heaviestLift' | 'highestVolumeSet' | 'distance' | 'duration';
       daysAgo: number;
     }
     const recentPRs: RecentPR[] = [];
@@ -468,19 +468,141 @@ router.get('/recent-summary', async (req: Request, res: Response) => {
       sessions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
       const lastSession = sessions[sessions.length - 1];
+      const daysAgo = Math.floor((now.getTime() - new Date(lastSession.date).getTime()) / (24 * 60 * 60 * 1000));
+
+      // Check weight/reps/1RM PRs
       const prData = checkPersonalRecord(
         lastSession.sets as any,
         sessions as any,
       );
 
       if (prData.isPersonalRecord) {
-        const daysAgo = Math.floor((now.getTime() - new Date(lastSession.date).getTime()) / (24 * 60 * 60 * 1000));
         recentPRs.push({
           exerciseTitle: lastSession.title,
           date: lastSession.date,
           prType: prData.prType || 'weight',
           daysAgo,
         });
+      }
+
+      // Check total volume PR for this exercise
+      const lastSessionVolume = (lastSession.sets as any[])
+        .filter((s: any) => s.type !== 'warmup' && s.weight_kg && s.reps)
+        .reduce((sum: number, s: any) => sum + s.weight_kg * s.reps, 0);
+
+      const maxPriorVolume = sessions.slice(0, -1)
+        .reduce((max: number, session: any) => {
+          const vol = (session.sets as any[])
+            .filter((s: any) => s.type !== 'warmup' && s.weight_kg && s.reps)
+            .reduce((sum: number, s: any) => sum + s.weight_kg * s.reps, 0);
+          return Math.max(max, vol);
+        }, 0);
+
+      if (lastSessionVolume > maxPriorVolume) {
+        recentPRs.push({
+          exerciseTitle: lastSession.title,
+          date: lastSession.date,
+          prType: 'totalVolume',
+          daysAgo,
+        });
+      }
+
+      // Check heaviest single lift PR (across all exercises, but track per exercise context)
+      const heaviestInSession = Math.max(
+        ...((lastSession.sets as any[])
+          .filter((s: any) => s.type !== 'warmup' && s.weight_kg)
+          .map((s: any) => s.weight_kg) || [0]),
+        0,
+      );
+
+      const heaviestEver = Math.max(
+        ...sessions.slice(0, -1)
+          .flatMap((session: any) =>
+            (session.sets as any[])
+              .filter((s: any) => s.type !== 'warmup' && s.weight_kg)
+              .map((s: any) => s.weight_kg),
+          ) || [0],
+        0,
+      );
+
+      if (heaviestInSession > heaviestEver) {
+        recentPRs.push({
+          exerciseTitle: lastSession.title,
+          date: lastSession.date,
+          prType: 'heaviestLift',
+          daysAgo,
+        });
+      }
+
+      // Check highest volume single set PR
+      const highestVolumeSetThisSession = Math.max(
+        ...((lastSession.sets as any[])
+          .filter((s: any) => s.type !== 'warmup' && s.weight_kg && s.reps)
+          .map((s: any) => s.weight_kg * s.reps) || [0]),
+        0,
+      );
+
+      const highestVolumeSetEver = Math.max(
+        ...sessions.slice(0, -1)
+          .flatMap((session: any) =>
+            (session.sets as any[])
+              .filter((s: any) => s.type !== 'warmup' && s.weight_kg && s.reps)
+              .map((s: any) => s.weight_kg * s.reps),
+          ) || [0],
+        0,
+      );
+
+      if (highestVolumeSetThisSession > highestVolumeSetEver) {
+        recentPRs.push({
+          exerciseTitle: lastSession.title,
+          date: lastSession.date,
+          prType: 'highestVolumeSet',
+          daysAgo,
+        });
+      }
+
+      // Check distance PR (for cardio/distance exercises)
+      const distanceSetsThisSession = (lastSession.sets as any[]).filter((s: any) => s.distance_m);
+      if (distanceSetsThisSession.length > 0) {
+        const totalDistanceThisSession = distanceSetsThisSession.reduce((sum: number, s: any) => sum + (s.distance_m || 0), 0);
+        const maxPriorDistance = sessions.slice(0, -1)
+          .reduce((max: number, session: any) => {
+            const dist = (session.sets as any[])
+              .filter((s: any) => s.distance_m)
+              .reduce((sum: number, s: any) => sum + (s.distance_m || 0), 0);
+            return Math.max(max, dist);
+          }, 0);
+
+        if (totalDistanceThisSession > maxPriorDistance) {
+          recentPRs.push({
+            exerciseTitle: lastSession.title,
+            date: lastSession.date,
+            prType: 'distance',
+            daysAgo,
+          });
+        }
+      }
+
+      // Check duration PR (for cardio/timed exercises)
+      const durationSetsThisSession = (lastSession.sets as any[]).filter((s: any) => s.duration_s);
+      if (durationSetsThisSession.length > 0) {
+        const totalDurationThisSession = durationSetsThisSession.reduce((sum: number, s: any) => sum + (s.duration_s || 0), 0);
+        const maxPriorDuration = sessions.slice(0, -1)
+          .reduce((max: number, session: any) => {
+            const dur = (session.sets as any[])
+              .filter((s: any) => s.duration_s)
+              .reduce((sum: number, s: any) => sum + (s.duration_s || 0), 0);
+            return Math.max(max, dur);
+          }, 0);
+
+        if (totalDurationThisSession > maxPriorDuration) {
+          recentPRs.push({
+            exerciseTitle: lastSession.title,
+            date: lastSession.date,
+            prType: 'duration',
+            daysAgo,
+          });
+        }
       }
     }
 
