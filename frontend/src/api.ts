@@ -125,10 +125,10 @@ export async function restartPlan(templateId: string) {
   return fetchApi(`/exercises/${templateId}/plan/restart`, { method: 'POST' });
 }
 
-export async function generateDraftWorkout(minutesAvailable: number, location: 'home' | 'gym', splitDay: 'push' | 'pull' | 'legs', includeCardio: boolean = false, includeWarmupCooldown: boolean = false) {
+export async function generateDraftWorkout(minutesAvailable: number, location: 'home' | 'gym', splitDay: 'push' | 'pull' | 'legs', includeCardio: boolean = false, includeAbdominals: boolean = false, includeWarmupCooldown: boolean = false) {
   return fetchApi('/draft-workout/generate', {
     method: 'POST',
-    body: JSON.stringify({ minutesAvailable, location, splitDay, includeCardio, includeWarmupCooldown }),
+    body: JSON.stringify({ minutesAvailable, location, splitDay, includeCardio, includeAbdominals, includeWarmupCooldown }),
   });
 }
 

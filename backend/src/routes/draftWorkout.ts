@@ -8,7 +8,7 @@ const router = Router();
 
 router.post('/generate', async (req: Request, res: Response) => {
   try {
-    const { minutesAvailable, location, splitDay, includeCardio, includeWarmupCooldown } = req.body;
+    const { minutesAvailable, location, splitDay, includeCardio, includeAbdominals, includeWarmupCooldown } = req.body;
 
     if (typeof minutesAvailable !== 'number' || minutesAvailable <= 0) {
       return res.status(400).json({ error: 'minutesAvailable must be a positive number' });
@@ -22,7 +22,7 @@ router.post('/generate', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'splitDay must be "push", "pull", or "legs"' });
     }
 
-    const result = await buildDraftWorkout(minutesAvailable, location as Location, splitDay as SplitDay, includeCardio === true, includeWarmupCooldown === true);
+    const result = await buildDraftWorkout(minutesAvailable, location as Location, splitDay as SplitDay, includeCardio === true, includeAbdominals === true, includeWarmupCooldown === true);
 
     res.json(result);
   } catch (err: any) {

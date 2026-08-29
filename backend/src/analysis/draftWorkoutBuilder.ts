@@ -6,8 +6,9 @@ import { analyzeExercise } from './exerciseAnalysis.js';
 import { computeMuscleRecency, rankMuscleGroups } from './muscleGroups.js';
 import { estimateExerciseSeconds, EXERCISE_SETUP_OVERHEAD_SECONDS, SECONDS_PER_SET } from './exerciseTimeEstimate.js';
 import { canExerciseBePerformed } from '../equipment/exerciseEquipmentMap.js';
+import { isCompoundExercise } from './incrementTable.js';
 import type { SplitDay } from './splitDefinitions.js';
-import { getMuscleGroupsForSplit, ANY_DAY_MUSCLE_GROUPS } from './splitDefinitions.js';
+import { getMuscleGroupsForSplit, getOptionalMuscleGroups } from './splitDefinitions.js';
 
 const MUSCLE_GROUP_REGION: Record<string, 'upper' | 'lower' | 'core'> = {
   quadriceps: 'lower', glutes: 'lower', hamstrings: 'lower', calves: 'lower', lower_back: 'lower',
@@ -45,6 +46,7 @@ export async function buildDraftWorkout(
   location: Location,
   splitDay: SplitDay,
   includeCardio: boolean = false,
+  includeAbdominals: boolean = false,
   includeWarmupCooldown: boolean = false,
 ): Promise<DraftWorkout | DraftWorkoutError> {
   const workoutsCache = await cache.readWorkouts();
@@ -70,15 +72,23 @@ export async function buildDraftWorkout(
     rankedMuscles = rankedMuscles.filter((m) => m !== 'cardio');
   }
 
-  // Filter to split day muscles + any-day muscles, preserving staleness order
-  const splitMuscles = new Set([...getMuscleGroupsForSplit(splitDay), ...ANY_DAY_MUSCLE_GROUPS]);
-  rankedMuscles = rankedMuscles.filter((m) => splitMuscles.has(m));
+  // Filter to split day muscles, optionally add accessory muscles
+  const splitMuscles = new Set(getMuscleGroupsForSplit(splitDay));
+  const accessoryMuscles = new Set(getOptionalMuscleGroups());
+
+  const allAvailableMuscles = new Set(splitMuscles);
+  if (includeAbdominals) {
+    accessoryMuscles.forEach((m) => allAvailableMuscles.add(m));
+  }
+  rankedMuscles = rankedMuscles.filter((m) => allAvailableMuscles.has(m));
 
   // Track which muscles are addressed by the draft
   const addressedMuscles = new Set<string>();
   const selectedExercises: DraftWorkoutExercise[] = [];
   const usedTemplateIds = new Set<string>();
   let usedSeconds = 0;
+  let compoundsSelected = 0;
+  const MAX_COMPOUNDS = 4;
 
   // Helper to find exercise candidates for a muscle group (Note: requires location to be available at call site)
   async function findCandidates(muscleGroup: string): Promise<ExerciseTemplate[]> {
@@ -167,38 +177,88 @@ export async function buildDraftWorkout(
     return workouts.some((w) => w.exercises.some((e) => e.exercise_template_id === templateId));
   }
 
-  // Phase 1: Fill with stale muscle groups
+  // Phase 1a: Select 3-4 compounds first, prioritizing split-day muscles
   for (const muscleGroup of rankedMuscles) {
+    if (compoundsSelected >= MAX_COMPOUNDS || !splitMuscles.has(muscleGroup)) {
+      continue; // Skip accessory muscles in compound phase
+    }
     if (addressedMuscles.has(muscleGroup)) {
-      continue; // Already covered by a previous exercise's secondary muscles
+      continue;
     }
 
     const candidates = await findCandidates(muscleGroup);
-    // Filter out exercises already used in this draft
     const availableCandidates = candidates.filter((t) => !usedTemplateIds.has(t.id));
     if (availableCandidates.length === 0) {
-      continue; // No available exercise for this muscle at this location
+      continue;
     }
 
-    // Prefer a previously-logged exercise
-    let selectedTemplate = availableCandidates.find((t) => hasExerciseHistory(t.id));
+    // Prioritize compounds over accessories in Phase 1a
+    const compoundCandidates = availableCandidates.filter((t) => isCompoundExercise(t));
+    const candidatePool = compoundCandidates.length > 0 ? compoundCandidates : availableCandidates;
+
+    // Prefer previously-logged exercises
+    let selectedTemplate = candidatePool.find((t) => hasExerciseHistory(t.id));
     if (!selectedTemplate) {
-      // Fall back to untried: prefer barbell/dumbbell compound over machines
-      selectedTemplate = availableCandidates.sort((a, b) => {
+      // Fall back to untried: prefer barbell/dumbbell
+      selectedTemplate = candidatePool.sort((a, b) => {
         const aEquip = (a.equipment || 'other').toLowerCase();
         const bEquip = (b.equipment || 'other').toLowerCase();
-
-        // Barbell/dumbbell first
         const aPreferred = aEquip === 'barbell' || aEquip === 'dumbbell' ? 0 : 1;
         const bPreferred = bEquip === 'barbell' || bEquip === 'dumbbell' ? 0 : 1;
         if (aPreferred !== bPreferred) return aPreferred - bPreferred;
-
-        // Fall back to array order (stable)
-        return availableCandidates.indexOf(a) - availableCandidates.indexOf(b);
+        return candidatePool.indexOf(a) - candidatePool.indexOf(b);
       })[0]!;
     }
 
-    // Try 3 sets, then 2, then skip this muscle
+    // Compounds get 3 sets in Phase 1a
+    const estSeconds = estimateExerciseSeconds(selectedTemplate, 3);
+    if (usedSeconds + estSeconds <= availableSeconds) {
+      const draftExercise = await buildDraftExercise(
+        selectedTemplate,
+        3,
+        hasExerciseHistory(selectedTemplate.id),
+        recency[muscleGroup]?.daysSinceTrained ?? null,
+      );
+
+      selectedExercises.push(draftExercise);
+      usedSeconds += estSeconds;
+      usedTemplateIds.add(selectedTemplate.id);
+      addressedMuscles.add(muscleGroup);
+      if (isCompoundExercise(selectedTemplate)) {
+        compoundsSelected++;
+      }
+    }
+  }
+
+  // Phase 1b: Add accessories and remaining split-day muscles with 2-3 sets
+  for (const muscleGroup of rankedMuscles) {
+    if (addressedMuscles.has(muscleGroup)) {
+      continue;
+    }
+
+    const candidates = await findCandidates(muscleGroup);
+    const availableCandidates = candidates.filter((t) => !usedTemplateIds.has(t.id));
+    if (availableCandidates.length === 0) {
+      continue;
+    }
+
+    // In Phase 1b, prefer accessories but accept compounds
+    const isolationCandidates = availableCandidates.filter((t) => !isCompoundExercise(t));
+    const candidatePool = isolationCandidates.length > 0 ? isolationCandidates : availableCandidates;
+
+    let selectedTemplate = candidatePool.find((t) => hasExerciseHistory(t.id));
+    if (!selectedTemplate) {
+      selectedTemplate = candidatePool.sort((a, b) => {
+        const aEquip = (a.equipment || 'other').toLowerCase();
+        const bEquip = (b.equipment || 'other').toLowerCase();
+        const aPreferred = aEquip === 'barbell' || aEquip === 'dumbbell' ? 0 : 1;
+        const bPreferred = bEquip === 'barbell' || bEquip === 'dumbbell' ? 0 : 1;
+        if (aPreferred !== bPreferred) return aPreferred - bPreferred;
+        return candidatePool.indexOf(a) - candidatePool.indexOf(b);
+      })[0]!;
+    }
+
+    // Try 3 sets, then 2 for accessories
     let setsToAdd = 0;
     for (const attemptSets of [3, 2]) {
       const estSeconds = estimateExerciseSeconds(selectedTemplate, attemptSets);
@@ -209,11 +269,9 @@ export async function buildDraftWorkout(
     }
 
     if (setsToAdd === 0) {
-      // Can't fit even 2 sets; stop fill phase entirely (overhead is the bottleneck)
-      break;
+      break; // Out of time
     }
 
-    // Add this exercise
     const draftExercise = await buildDraftExercise(
       selectedTemplate,
       setsToAdd,
@@ -224,19 +282,103 @@ export async function buildDraftWorkout(
     selectedExercises.push(draftExercise);
     usedSeconds += estimateExerciseSeconds(selectedTemplate, setsToAdd);
     usedTemplateIds.add(selectedTemplate.id);
-
-    // Mark this muscle and all its secondary targets as addressed
     addressedMuscles.add(muscleGroup);
-    if (selectedTemplate.secondary_muscle_groups) {
-      for (const secondary of selectedTemplate.secondary_muscle_groups) {
-        addressedMuscles.add(secondary);
+  }
+
+  // Phase 2: Add more exercises with 2 sets before resorting to bonus sets
+  // First pass: try new muscles not yet addressed
+  let canAddMoreExercises = true;
+  while (canAddMoreExercises) {
+    canAddMoreExercises = false;
+
+    for (const muscleGroup of rankedMuscles) {
+      if (addressedMuscles.has(muscleGroup)) {
+        continue;
+      }
+
+      const candidates = await findCandidates(muscleGroup);
+      const availableCandidates = candidates.filter((t) => !usedTemplateIds.has(t.id));
+      if (availableCandidates.length === 0) {
+        continue;
+      }
+
+      let selectedTemplate = availableCandidates.find((t) => hasExerciseHistory(t.id));
+      if (!selectedTemplate) {
+        selectedTemplate = availableCandidates.sort((a, b) => {
+          const aEquip = (a.equipment || 'other').toLowerCase();
+          const bEquip = (b.equipment || 'other').toLowerCase();
+          const aPreferred = aEquip === 'barbell' || aEquip === 'dumbbell' ? 0 : 1;
+          const bPreferred = bEquip === 'barbell' || bEquip === 'dumbbell' ? 0 : 1;
+          if (aPreferred !== bPreferred) return aPreferred - bPreferred;
+          return availableCandidates.indexOf(a) - availableCandidates.indexOf(b);
+        })[0]!;
+      }
+
+      const estSeconds = estimateExerciseSeconds(selectedTemplate, 2);
+      if (usedSeconds + estSeconds <= availableSeconds) {
+        const draftExercise = await buildDraftExercise(
+          selectedTemplate,
+          2,
+          hasExerciseHistory(selectedTemplate.id),
+          recency[muscleGroup]?.daysSinceTrained ?? null,
+        );
+
+        selectedExercises.push(draftExercise);
+        usedSeconds += estSeconds;
+        usedTemplateIds.add(selectedTemplate.id);
+        addressedMuscles.add(muscleGroup);
+        canAddMoreExercises = true;
+        break;
       }
     }
   }
 
-  // Phase 2: Distribute leftover time as bonus sets
+  // Second pass: add more exercises for already-addressed muscles (different exercises, same primary muscle)
+  canAddMoreExercises = true;
+  while (canAddMoreExercises) {
+    canAddMoreExercises = false;
+
+    for (const muscleGroup of rankedMuscles) {
+      // This time, we DON'T skip addressed muscles - we want secondary exercises
+      const candidates = await findCandidates(muscleGroup);
+      const availableCandidates = candidates.filter((t) => !usedTemplateIds.has(t.id));
+      if (availableCandidates.length === 0) {
+        continue;
+      }
+
+      let selectedTemplate = availableCandidates.find((t) => hasExerciseHistory(t.id));
+      if (!selectedTemplate) {
+        selectedTemplate = availableCandidates.sort((a, b) => {
+          const aEquip = (a.equipment || 'other').toLowerCase();
+          const bEquip = (b.equipment || 'other').toLowerCase();
+          const aPreferred = aEquip === 'barbell' || aEquip === 'dumbbell' ? 0 : 1;
+          const bPreferred = bEquip === 'barbell' || bEquip === 'dumbbell' ? 0 : 1;
+          if (aPreferred !== bPreferred) return aPreferred - bPreferred;
+          return availableCandidates.indexOf(a) - availableCandidates.indexOf(b);
+        })[0]!;
+      }
+
+      const estSeconds = estimateExerciseSeconds(selectedTemplate, 2);
+      if (usedSeconds + estSeconds <= availableSeconds) {
+        const draftExercise = await buildDraftExercise(
+          selectedTemplate,
+          2,
+          hasExerciseHistory(selectedTemplate.id),
+          recency[muscleGroup]?.daysSinceTrained ?? null,
+        );
+
+        selectedExercises.push(draftExercise);
+        usedSeconds += estSeconds;
+        usedTemplateIds.add(selectedTemplate.id);
+        canAddMoreExercises = true;
+        break;
+      }
+    }
+  }
+
+  // Phase 3: Distribute any remaining time as bonus sets (only after exercises exhausted)
   const remainingSeconds = availableSeconds - usedSeconds;
-  const perSetIsolationSeconds = SECONDS_PER_SET.isolation; // cheapest increment
+  const perSetIsolationSeconds = SECONDS_PER_SET.isolation;
 
   if (remainingSeconds >= perSetIsolationSeconds && selectedExercises.length > 0) {
     let bonusSetIndex = 0;
@@ -257,7 +399,7 @@ export async function buildDraftWorkout(
 
       bonusSetIndex = (bonusSetIndex + 1) % selectedExercises.length;
 
-      // Break if we've cycled through all exercises without adding a set (all at max 5)
+      // Break if we've cycled through all exercises without adding a set
       if (cyclesWithoutAddingSet >= selectedExercises.length) {
         break;
       }

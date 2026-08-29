@@ -20,6 +20,7 @@ interface DraftSettings {
   splitDay: 'push' | 'pull' | 'legs';
   includeWarmup: boolean;
   includeCardio: boolean;
+  includeAbdominals: boolean;
   includeWarmupCooldown: boolean;
 }
 
@@ -28,8 +29,9 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     minutesAvailable: 45,
     location: globalLocation,
     splitDay: 'push',
-    includeWarmup: true,
+    includeWarmup: false,
     includeCardio: false,
+    includeAbdominals: false,
     includeWarmupCooldown: false,
   });
   const [draft, setDraft] = useState<DraftWorkout | null>(null);
@@ -62,7 +64,7 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const result = (await api.generateDraftWorkout(settings.minutesAvailable, settings.location, settings.splitDay, settings.includeCardio, settings.includeWarmupCooldown)) as
+      const result = (await api.generateDraftWorkout(settings.minutesAvailable, settings.location, settings.splitDay, settings.includeCardio, settings.includeAbdominals, settings.includeWarmupCooldown)) as
         | DraftWorkout
         | { status: 'time_too_short'; minMinutesNeeded: number };
 
@@ -368,6 +370,26 @@ export default function DraftWorkoutView({ location: globalLocation }: Props) {
                 }}
               />
               <span style={{ fontSize: '12px' }}>Cardio</span>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px', whiteSpace: 'nowrap' }}>
+              <input
+                type="checkbox"
+                checked={settings.includeAbdominals}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    includeAbdominals: e.target.checked,
+                  })
+                }
+                style={{
+                  width: '14px',
+                  height: '14px',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              />
+              <span style={{ fontSize: '12px' }}>Abdominals</span>
             </label>
 
             <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px', whiteSpace: 'nowrap' }}>

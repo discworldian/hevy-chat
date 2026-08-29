@@ -1,7 +1,5 @@
 export type SplitDay = 'push' | 'pull' | 'legs';
 
-export const ANY_DAY_MUSCLE_GROUPS = ['abdominals'];
-
 const SPLIT_MUSCLE_GROUPS: Record<SplitDay, string[]> = {
   push: ['chest', 'shoulders', 'triceps'],
   pull: ['lats', 'upper_back', 'traps', 'biceps', 'forearms'],
@@ -10,4 +8,8 @@ const SPLIT_MUSCLE_GROUPS: Record<SplitDay, string[]> = {
 
 export function getMuscleGroupsForSplit(splitDay: SplitDay): string[] {
   return SPLIT_MUSCLE_GROUPS[splitDay];
+}
+
+export function getOptionalMuscleGroups(): string[] {
+  return ['abdominals'];
 }
