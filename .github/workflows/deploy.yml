@@ -1,0 +1,92 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Stage release
+        run: |
+          mkdir -p release/backend release/frontend
+          cp -r backend/dist backend/package.json backend/package-lock.json release/backend/
+          cp -r frontend/dist/. release/frontend/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release
+          retention-days: 3
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: release
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Upload release
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          # --exclude protects server-only state from --delete:
+          # backend/data (cache), backend/.env (secrets), backend/node_modules (installed on server)
+          rsync -az --delete \
+            --exclude 'backend/data/' \
+            --exclude 'backend/.env' \
+            --exclude 'backend/node_modules/' \
+            -e "ssh -i $HOME/.ssh/id_ed25519" \
+            release/ "deploy@$DEPLOY_HOST:/opt/hevy-chat/app/"
+
+      - name: Install dependencies and restart service
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "deploy@$DEPLOY_HOST" '
+            set -e
+            cd /opt/hevy-chat/app/backend
+            npm ci --omit=dev
+            sudo systemctl restart hevy-chat
+            sleep 2
+            curl -fsS http://127.0.0.1:3001/api/health > /dev/null
+          '

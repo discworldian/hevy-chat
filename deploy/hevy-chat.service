@@ -1,0 +1,18 @@
+[Unit]
+Description=Hevy Chat backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deploy
+WorkingDirectory=/opt/hevy-chat/app/backend
+# dotenv loads backend/.env (HEVY_API_KEY) itself
+ExecStart=/usr/bin/node dist/index.js
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

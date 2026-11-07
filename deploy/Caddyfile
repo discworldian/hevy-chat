@@ -1,0 +1,16 @@
+# Serves the built frontend and proxies /api to the backend.
+# Only reachable over Tailscale: the server firewall (ufw) denies port 80
+# on the public interface and allows it only on tailscale0.
+:80 {
+	encode gzip
+	root * /opt/hevy-chat/app/frontend
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3001
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}
