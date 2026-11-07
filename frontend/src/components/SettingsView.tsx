@@ -180,8 +180,8 @@ export default function SettingsView() {
                         <div style={{ fontWeight: 500 }}>{item.name}</div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
                           {item.type}
-                          {item.minWeightKg || item.maxWeightKg
-                            ? ` • ${item.minWeightKg || '-'}–${item.maxWeightKg || '-'}kg`
+                          {item.minWeightKg != null || item.maxWeightKg != null
+                            ? ` • ${item.minWeightKg ?? '-'}–${item.maxWeightKg ?? '-'}kg`
                             : ''}
                         </div>
                       </div>
