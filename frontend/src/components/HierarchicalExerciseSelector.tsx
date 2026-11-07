@@ -41,6 +41,7 @@ export default function HierarchicalExerciseSelector({
 }: Props) {
   const [selectedMuscleGroup, setSelectedMuscleGroup] = useState<string | null>(initialMuscleGroup || null);
   const [selectedMovementType, setSelectedMovementType] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const selectedTemplateIds = useMemo(() => {
     return new Set(selectedExercises.map((ex) => ex.exerciseTemplateId));
@@ -103,11 +104,70 @@ export default function HierarchicalExerciseSelector({
     }
   };
 
+  // Search results when query is active
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const query = searchQuery.toLowerCase();
+    return allExercises
+      .filter((ex) => ex.name.toLowerCase().includes(query))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [searchQuery, allExercises]);
+
   return (
     <div style={{ marginBottom: '16px' }}>
       <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '12px', color: 'var(--text-muted)' }}>
         Add Exercise
       </div>
+
+      {/* Search box */}
+      <input
+        type="text"
+        placeholder="Search exercises..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        style={{
+          width: '100%',
+          padding: '8px',
+          marginBottom: '12px',
+          borderRadius: '6px',
+          border: '1px solid var(--border)',
+          backgroundColor: 'var(--bg)',
+          color: 'var(--text)',
+          fontSize: '13px',
+        }}
+      />
+
+      {/* Show search results if query is active */}
+      {searchQuery.trim() && searchResults.length > 0 && (
+        <div style={{ marginBottom: '12px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+            Found {searchResults.length} exercise{searchResults.length !== 1 ? 's' : ''}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px', overflowY: 'auto' }}>
+            {searchResults.map((ex) => (
+              <button
+                key={ex.templateId}
+                onClick={() => {
+                  handleSelectExercise(ex.templateId);
+                  setSearchQuery('');
+                }}
+                style={{
+                  padding: '8px 12px',
+                  textAlign: 'left',
+                  backgroundColor: selectedTemplateIds.has(ex.templateId) ? 'var(--accent)' : 'var(--bg)',
+                  color: selectedTemplateIds.has(ex.templateId) ? 'var(--accent-contrast)' : 'var(--text)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                }}
+              >
+                {ex.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {/* Level 1: Muscle Group */}

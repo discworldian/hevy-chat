@@ -203,6 +203,54 @@ export default function HistoryView({ location }: Props) {
     loadTemplates();
   }, []);
 
+  useEffect(() => {
+    const populateWorkoutAnimals = () => {
+      const newAnimals: Record<string, string> = { ...workoutAnimals };
+      workouts.forEach((w) => {
+        if (!newAnimals[w.id]) {
+          const totalVolume = w.exercises.reduce((sum: any, ex: any) => {
+            return sum + ex.sets.reduce((exSum: any, set: any) => {
+              if (set.type !== 'warmup' && set.weight_kg && set.reps) {
+                return exSum + set.weight_kg * set.reps;
+              }
+              return exSum;
+            }, 0);
+          }, 0);
+          const validAnimals = ANIMALS.filter((a) => Math.round(totalVolume / a.weight) >= 2);
+          const animal = validAnimals.length > 0 ? validAnimals[Math.floor(Math.random() * validAnimals.length)] : ANIMALS[0];
+          newAnimals[w.id] = animal.wiki;
+        }
+      });
+      if (Object.keys(newAnimals).length > Object.keys(workoutAnimals).length) {
+        setWorkoutAnimals(newAnimals);
+      }
+    };
+    populateWorkoutAnimals();
+  }, [workouts, workoutAnimals]);
+
+  useEffect(() => {
+    const populateAnimalData = async () => {
+      const newData: Record<string, { image: string | null; summary: string | null }> = { ...animalData };
+      const animalsToFetch = Object.values(workoutAnimals).filter((wiki) => !newData[wiki]);
+      for (const wiki of animalsToFetch) {
+        const result = await fetchAnimalData(wiki);
+        newData[wiki] = result;
+      }
+      if (Object.keys(newData).length > Object.keys(animalData).length) {
+        setAnimalData(newData);
+      }
+    };
+    if (Object.keys(workoutAnimals).length > 0) {
+      populateAnimalData();
+    }
+  }, [workoutAnimals, animalData]);
+
+  useEffect(() => {
+    if (activeTab === 'advice' && expandedId) {
+      fetchWorkoutAdvice(expandedId);
+    }
+  }, [activeTab, expandedId]);
+
   if (error) return <ErrorBanner message={error} />;
 
   const isExpanded = (id: string) => expandedId === id;
@@ -699,24 +747,10 @@ export default function HistoryView({ location }: Props) {
                       return rpes.length > 0 ? (Math.round((rpes.reduce((a: any, b: any) => a + b, 0) / rpes.length) * 10) / 10).toFixed(1) : null;
                     })();
 
-                    // Get or create a random animal for this workout (min 2x multiplier)
-                    let animal = workoutAnimals[w.id] ? ANIMALS.find((a) => a.wiki === workoutAnimals[w.id]) : null;
-                    if (!animal) {
-                      // Find animals with multiplier >= 2
-                      const validAnimals = ANIMALS.filter((a) => Math.round(totalVolume / a.weight) >= 2);
-                      animal = validAnimals.length > 0 ? validAnimals[Math.floor(Math.random() * validAnimals.length)] : ANIMALS[0];
-                      setWorkoutAnimals((prev) => ({ ...prev, [w.id]: animal!.wiki }));
-                    }
-
-                    const multiplier = Math.round(totalVolume / animal.weight);
-                    const data = animalData[animal.wiki];
-
-                    // Fetch data if not cached
-                    if (!data) {
-                      fetchAnimalData(animal.wiki).then((result) => {
-                        setAnimalData((prev) => ({ ...prev, [animal!.wiki]: result }));
-                      });
-                    }
+                    const animalWiki = workoutAnimals[w.id];
+                    const animal = animalWiki ? ANIMALS.find((a) => a.wiki === animalWiki) : ANIMALS[0];
+                    const multiplier = animal ? Math.round(totalVolume / animal.weight) : 0;
+                    const data = animal ? animalData[animal.wiki] : null;
 
                     return (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -747,6 +781,7 @@ export default function HistoryView({ location }: Props) {
                         </div>
 
                         {/* Animal Comparison */}
+                        {animal && (
                         <div style={{ padding: '10px', background: 'var(--bg)', borderRadius: '4px' }}>
                           <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>You lifted the weight of...</div>
                           <a
@@ -795,17 +830,13 @@ export default function HistoryView({ location }: Props) {
                             </div>
                           )}
                         </div>
+                        )}
                       </div>
                     );
                   })()}
 
                   {activeTab === 'advice' && (() => {
                     const advice = workoutAdvice[w.id];
-
-                    // Trigger fetch on first view
-                    if (!advice && !loadingAdvice[w.id]) {
-                      fetchWorkoutAdvice(w.id);
-                    }
 
                     if (loadingAdvice[w.id]) {
                       return <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Loading advice...</div>;
